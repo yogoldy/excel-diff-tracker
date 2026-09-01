@@ -11,6 +11,30 @@ namespace ExcelDiffTracker.Tests;
 public sealed class StorageAndTrackingTests
 {
     [Fact]
+    public async Task StableCopyReadsWorkbookHeldOpenByACompatibleWriter()
+    {
+        using var directory = new TestDirectory();
+        var workbookPath = Path.Combine(directory.Path, "open-in-excel.xlsx");
+        WorkbookFixture.Create(workbookPath, false, new FixtureSheet(1, "Sheet1", null, new FixtureCell("A1", "42")));
+        var expectedHash = Hash(workbookPath);
+        var expectedLength = new FileInfo(workbookPath).Length;
+
+        await using var writer = new FileStream(
+            workbookPath,
+            FileMode.Open,
+            FileAccess.ReadWrite,
+            FileShare.ReadWrite | FileShare.Delete);
+        using var stable = await new StableWorkbookCopy(
+            TimeSpan.FromMilliseconds(10),
+            TimeSpan.FromMilliseconds(10),
+            TimeSpan.FromSeconds(1)).CreateAsync(workbookPath);
+
+        Assert.Equal(expectedHash, stable.Sha256);
+        Assert.Equal(expectedLength, stable.SourceLength);
+        Assert.Equal("42", new WorkbookExtractor().Extract(stable.TemporaryPath).Sheets[1].Cells["A1"].LiteralValue);
+    }
+
+    [Fact]
     public async Task BaselineIsSilentAndFirstSaveIsCommittedTransactionally()
     {
         using var directory = new TestDirectory();
@@ -208,6 +232,48 @@ public sealed class StorageAndTrackingTests
     }
 
     [Fact]
+    public async Task ReconciliationRecoversAfterLockOutlastsTimeoutWithoutAFileEventAndPreservesBaseline()
+    {
+        using var directory = new TestDirectory();
+        var workbookPath = Path.Combine(directory.Path, "recover.xlsx");
+        WorkbookFixture.Create(workbookPath, false, new FixtureSheet(1, "Sheet1", null, new FixtureCell("A1", "1")));
+        var store = new HistoryStore(Path.Combine(directory.Path, "history.db"));
+        await using var coordinator = new TrackingCoordinator(
+            store,
+            stableCopy: new StableWorkbookCopy(
+                TimeSpan.FromMilliseconds(10),
+                TimeSpan.FromMilliseconds(10),
+                TimeSpan.FromMilliseconds(100)),
+            reconciliationInterval: TimeSpan.FromMilliseconds(40));
+        await coordinator.InitializeAsync();
+        var baseline = await coordinator.AddWorkbookAsync(workbookPath, Path.Combine(directory.Path, "reports"));
+        WorkbookFixture.Create(workbookPath, false, new FixtureSheet(1, "Sheet1", null, new FixtureCell("A1", "2")));
+
+        await using var exclusiveWriter = new FileStream(
+            workbookPath,
+            FileMode.Open,
+            FileAccess.ReadWrite,
+            FileShare.None);
+        await coordinator.StartAsync();
+        await WaitForErrorCountAsync(store, baseline.Id, 1);
+
+        var afterTimeout = await store.GetTrackedWorkbookAsync(baseline.Id);
+        Assert.NotNull(afterTimeout);
+        Assert.Equal(baseline.CurrentHash, afterTimeout.CurrentHash);
+        Assert.Equal(baseline.CurrentSequence, afterTimeout.CurrentSequence);
+        Assert.Empty(await store.GetVersionsAsync(baseline.Id));
+
+        await exclusiveWriter.DisposeAsync();
+        await WaitForVersionCountAsync(store, baseline.Id, 1);
+
+        var version = Assert.Single(await store.GetVersionsAsync(baseline.Id));
+        Assert.Equal(baseline.CurrentHash, version.PreviousSha256);
+        var recovered = await store.GetTrackedWorkbookAsync(baseline.Id);
+        Assert.NotNull(recovered);
+        Assert.Equal("2", (await store.LoadCurrentSnapshotAsync(recovered)).Sheets[1].Cells["A1"].LiteralValue);
+    }
+
+    [Fact]
     public async Task RestartReconciliationCapturesAChangeMadeWhileTrackerWasStopped()
     {
         using var directory = new TestDirectory();
@@ -245,6 +311,18 @@ public sealed class StorageAndTrackingTests
             await Task.Delay(50);
         }
         Assert.Fail($"Expected {expected} versions before timeout.");
+    }
+
+    private static async Task WaitForErrorCountAsync(HistoryStore store, Guid workbookId, int expected)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(8);
+        while (DateTime.UtcNow < deadline)
+        {
+            if ((await store.GetErrorsAsync(workbookId)).Count >= expected)
+                return;
+            await Task.Delay(50);
+        }
+        Assert.Fail($"Expected {expected} errors before timeout.");
     }
 
     private static string Hash(string path) => Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(path)));

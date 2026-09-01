@@ -29,6 +29,7 @@ public sealed record StableCopyResult : IDisposable
 
 public sealed class StableWorkbookCopy
 {
+    private const FileShare SourceFileShare = FileShare.ReadWrite | FileShare.Delete;
     private readonly TimeSpan _stableInterval;
     private readonly TimeSpan _retryInterval;
     private readonly TimeSpan _timeout;
@@ -65,7 +66,7 @@ public sealed class StableWorkbookCopy
                         fullPath,
                         FileMode.Open,
                         FileAccess.Read,
-                        FileShare.Read | FileShare.Delete,
+                        SourceFileShare,
                         1024 * 1024,
                         FileOptions.Asynchronous | FileOptions.SequentialScan))
                     await using (var target = new FileStream(
@@ -88,13 +89,36 @@ public sealed class StableWorkbookCopy
                         continue;
                     }
 
+                    // Excel keeps a write handle open while the workbook is being edited. Allowing
+                    // that handle means metadata alone is not enough to prove that a save did not
+                    // overlap our read (Windows can defer last-write updates until a handle closes).
+                    // Require the source bytes to remain identical to the candidate copy across a
+                    // second stability interval before accepting it.
+                    await Task.Delay(_stableInterval, cancellationToken).ConfigureAwait(false);
+                    var beforeVerification = ReadMetadata(fullPath);
+                    if (second.Length != beforeVerification.Length || second.LastWriteUtc != beforeVerification.LastWriteUtc)
+                    {
+                        File.Delete(temporaryPath);
+                        continue;
+                    }
+
                     var sha256 = await ComputeHashAsync(temporaryPath, cancellationToken).ConfigureAwait(false);
+                    var sourceSha256 = await ComputeHashAsync(fullPath, SourceFileShare, cancellationToken).ConfigureAwait(false);
+                    var verified = ReadMetadata(fullPath);
+                    if (second.Length != verified.Length
+                        || second.LastWriteUtc != verified.LastWriteUtc
+                        || !string.Equals(sha256, sourceSha256, StringComparison.OrdinalIgnoreCase))
+                    {
+                        File.Delete(temporaryPath);
+                        continue;
+                    }
+
                     return new StableCopyResult
                     {
                         TemporaryPath = temporaryPath,
                         Sha256 = sha256,
-                        SourceLastWriteUtc = after.LastWriteUtc,
-                        SourceLength = after.Length
+                        SourceLastWriteUtc = verified.LastWriteUtc,
+                        SourceLength = verified.Length
                     };
                 }
                 catch
@@ -122,13 +146,16 @@ public sealed class StableWorkbookCopy
         return (file.Length, file.LastWriteTimeUtc);
     }
 
-    private static async Task<string> ComputeHashAsync(string path, CancellationToken cancellationToken)
+    private static Task<string> ComputeHashAsync(string path, CancellationToken cancellationToken) =>
+        ComputeHashAsync(path, FileShare.Read, cancellationToken);
+
+    private static async Task<string> ComputeHashAsync(string path, FileShare fileShare, CancellationToken cancellationToken)
     {
         await using var stream = new FileStream(
             path,
             FileMode.Open,
             FileAccess.Read,
-            FileShare.Read,
+            fileShare,
             1024 * 1024,
             FileOptions.Asynchronous | FileOptions.SequentialScan);
         var hash = await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false);
