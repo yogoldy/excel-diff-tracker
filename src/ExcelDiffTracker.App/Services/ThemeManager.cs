@@ -13,6 +13,22 @@ public enum AppTheme
 
 public sealed class ThemeManager : IDisposable
 {
+    private static readonly IReadOnlyDictionary<string, string> DarkColors = new Dictionary<string, string>
+    {
+        ["AppBackgroundBrush"] = "#242825", ["SidebarBrush"] = "#1D211F", ["CardBrush"] = "#2D332F",
+        ["CardHoverBrush"] = "#35423C", ["TextBrush"] = "#EDF2EE", ["MutedTextBrush"] = "#A9B4AF",
+        ["BorderBrush"] = "#465049", ["AccentBrush"] = "#65CBB0", ["AccentSoftBrush"] = "#314D45",
+        ["WarningBrush"] = "#E5A64B", ["ErrorBrush"] = "#F07D7D", ["PrimaryForegroundBrush"] = "#10221D"
+    };
+
+    private static readonly IReadOnlyDictionary<string, string> LightColors = new Dictionary<string, string>
+    {
+        ["AppBackgroundBrush"] = "#F6F4EF", ["SidebarBrush"] = "#ECE9E1", ["CardBrush"] = "#FFFEFB",
+        ["CardHoverBrush"] = "#F3F7F4", ["TextBrush"] = "#24312D", ["MutedTextBrush"] = "#5E6965",
+        ["BorderBrush"] = "#D9DED9", ["AccentBrush"] = "#236B5C", ["AccentSoftBrush"] = "#DDEDE7",
+        ["WarningBrush"] = "#A86413", ["ErrorBrush"] = "#B33A3A", ["PrimaryForegroundBrush"] = "#FFFFFF"
+    };
+
     private AppTheme _selected = AppTheme.System;
 
     public ThemeManager() => SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
@@ -21,21 +37,7 @@ public sealed class ThemeManager : IDisposable
     {
         _selected = theme;
         var dark = theme == AppTheme.Dark || theme == AppTheme.System && IsSystemDark();
-        var colors = dark
-            ? new Dictionary<string, string>
-            {
-                ["AppBackgroundBrush"] = "#242825", ["SidebarBrush"] = "#1D211F", ["CardBrush"] = "#2D332F",
-                ["CardHoverBrush"] = "#35423C", ["TextBrush"] = "#EDF2EE", ["MutedTextBrush"] = "#A9B4AF",
-                ["BorderBrush"] = "#465049", ["AccentBrush"] = "#55B39B", ["AccentSoftBrush"] = "#314D45",
-                ["WarningBrush"] = "#E5A64B", ["ErrorBrush"] = "#F07D7D", ["PrimaryForegroundBrush"] = "#FFFFFF"
-            }
-            : new Dictionary<string, string>
-            {
-                ["AppBackgroundBrush"] = "#F6F4EF", ["SidebarBrush"] = "#ECE9E1", ["CardBrush"] = "#FFFEFB",
-                ["CardHoverBrush"] = "#F3F7F4", ["TextBrush"] = "#24312D", ["MutedTextBrush"] = "#6D7773",
-                ["BorderBrush"] = "#D9DED9", ["AccentBrush"] = "#287A68", ["AccentSoftBrush"] = "#DDEDE7",
-                ["WarningBrush"] = "#A86413", ["ErrorBrush"] = "#B33A3A", ["PrimaryForegroundBrush"] = "#FFFFFF"
-            };
+        var colors = GetPalette(dark ? AppTheme.Dark : AppTheme.Light);
 
         if (SystemParameters.HighContrast)
         {
@@ -59,6 +61,9 @@ public sealed class ThemeManager : IDisposable
     }
 
     public void Dispose() => SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
+
+    internal static IReadOnlyDictionary<string, string> GetPalette(AppTheme theme) =>
+        theme == AppTheme.Dark ? DarkColors : LightColors;
 
     private void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs args)
     {

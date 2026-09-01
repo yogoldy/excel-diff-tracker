@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:ExcelDiffTracker.App"
         Title="Excel Diff Tracker" Width="1060" Height="720" MinWidth="760" MinHeight="520"
+        AutomationProperties.AutomationId="MainWindow" AutomationProperties.Name="Excel Diff Tracker main window"
         WindowStartupLocation="CenterScreen" Closing="OnClosing">
     <Window.Resources>
         <local:StringEqualsToVisibilityConverter x:Key="PageVisibility" />
@@ -16,38 +17,40 @@
 
     <Grid Background="{DynamicResource AppBackgroundBrush}">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="176" />
+            <ColumnDefinition Width="184" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
         <Border Grid.Column="0" Background="{DynamicResource SidebarBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
-            <Grid Margin="14,18">
+            <Grid Margin="14,18,14,14">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
-                    <RowDefinition Height="20" />
+                    <RowDefinition Height="14" />
                     <RowDefinition Height="*" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <StackPanel Orientation="Horizontal">
                     <Border Width="35" Height="35" Background="{DynamicResource AccentBrush}" CornerRadius="9">
                         <Canvas Width="29" Height="29">
-                            <Path Stroke="White" StrokeThickness="1.5" Data="M8,4 L19,4 L22,7 L22,22 L8,22 Z M18,4 L18,8 L22,8 M11,11 L18,11 M11,15 L16,15" />
-                            <Ellipse Canvas.Left="15" Canvas.Top="15" Width="10" Height="10" Fill="{DynamicResource AccentBrush}" Stroke="White" StrokeThickness="1.5" />
-                            <Path Stroke="White" StrokeThickness="1.4" Data="M20,17 L20,20 L22,21" />
+                            <Path Stroke="{DynamicResource PrimaryForegroundBrush}" StrokeThickness="1.5" Data="M8,4 L19,4 L22,7 L22,22 L8,22 Z M18,4 L18,8 L22,8 M11,11 L18,11 M11,15 L16,15" />
+                            <Ellipse Canvas.Left="15" Canvas.Top="15" Width="10" Height="10" Fill="{DynamicResource AccentBrush}" Stroke="{DynamicResource PrimaryForegroundBrush}" StrokeThickness="1.5" />
+                            <Path Stroke="{DynamicResource PrimaryForegroundBrush}" StrokeThickness="1.4" Data="M20,17 L20,20 L22,21" />
                         </Canvas>
                     </Border>
                     <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold" FontSize="14" Text="Excel Diff&#x0a;Tracker" LineHeight="16" />
                 </StackPanel>
 
-                <StackPanel Grid.Row="2">
-                    <Button Style="{StaticResource SidebarButton}" Command="{Binding NavigateCommand}" CommandParameter="Dashboard" Content="⌂  Dashboard" />
-                    <Button Style="{StaticResource SidebarButton}" Command="{Binding NavigateCommand}" CommandParameter="Workbooks" Content="▦  Workbooks" />
-                    <Button Style="{StaticResource SidebarButton}" Command="{Binding NavigateCommand}" CommandParameter="History" Content="↺  History" />
-                    <Button Style="{StaticResource SidebarButton}" Command="{Binding NavigateCommand}" CommandParameter="Settings" Content="⚙  Settings" />
-                    <Button Style="{StaticResource SidebarButton}" Command="{Binding NavigateCommand}" CommandParameter="About" Content="ⓘ  About" />
-                </StackPanel>
+                <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel>
+                        <Button Style="{StaticResource SidebarButton}" Command="{Binding NavigateCommand}" CommandParameter="Dashboard" Content="⌂  Dashboard" AutomationProperties.AutomationId="DashboardNavigationButton" AutomationProperties.Name="Dashboard" />
+                        <Button Style="{StaticResource SidebarButton}" Command="{Binding NavigateCommand}" CommandParameter="Workbooks" Content="▦  Workbooks" AutomationProperties.AutomationId="WorkbooksNavigationButton" AutomationProperties.Name="Workbooks" />
+                        <Button Style="{StaticResource SidebarButton}" Command="{Binding NavigateCommand}" CommandParameter="History" Content="↺  History" AutomationProperties.AutomationId="HistoryNavigationButton" AutomationProperties.Name="History" />
+                        <Button x:Name="SettingsNavigationButton" Style="{StaticResource SidebarButton}" Command="{Binding NavigateCommand}" CommandParameter="Settings" Content="⚙  Settings" AutomationProperties.AutomationId="SettingsNavigationButton" AutomationProperties.Name="Settings" />
+                        <Button Style="{StaticResource SidebarButton}" Command="{Binding NavigateCommand}" CommandParameter="About" Content="ⓘ  About" AutomationProperties.AutomationId="AboutNavigationButton" AutomationProperties.Name="About" />
+                    </StackPanel>
+                </ScrollViewer>
 
-                <Border Grid.Row="3" Background="{DynamicResource AccentSoftBrush}" CornerRadius="8" Padding="10">
+                <Border Grid.Row="3" Background="{DynamicResource AccentSoftBrush}" CornerRadius="8" Padding="10" AutomationProperties.AutomationId="LocalOnlyNotice">
                     <StackPanel>
                         <TextBlock FontSize="12" FontWeight="SemiBold" Text="● LOCAL ONLY" Foreground="{DynamicResource AccentBrush}" />
                         <TextBlock Margin="0,4,0,0" Style="{StaticResource MutedText}" FontSize="11" Text="No cloud, account, or telemetry." />
@@ -57,16 +60,17 @@
         </Border>
 
         <Grid Grid.Column="1">
-            <Grid Margin="30,25,30,28">
-                <Grid Visibility="{Binding CurrentPage, Converter={StaticResource PageVisibility}, ConverterParameter=Dashboard}">
+            <Grid Margin="24,22,24,24">
+                <Grid Visibility="{Binding CurrentPage, Converter={StaticResource PageVisibility}, ConverterParameter=Dashboard}" AutomationProperties.AutomationId="DashboardPage">
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                    <DockPanel Margin="0,0,0,22">
-                        <StackPanel DockPanel.Dock="Left">
-                            <TextBlock Style="{StaticResource PageTitle}" Text="Dashboard" />
+                    <Grid Margin="0,0,0,22">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <StackPanel Margin="0,0,16,0">
+                            <TextBlock Style="{StaticResource PageTitle}" Text="Dashboard" AutomationProperties.AutomationId="DashboardHeading" />
                             <TextBlock Style="{StaticResource MutedText}" Text="{Binding ActiveSummary}" />
                         </StackPanel>
-                        <Button DockPanel.Dock="Right" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource PrimaryButton}" Command="{Binding AddWorkbookCommand}" Content="＋ Add workbook" />
-                    </DockPanel>
+                        <Button Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource PrimaryButton}" Command="{Binding AddWorkbookCommand}" Content="＋ Add workbook" AutomationProperties.AutomationId="DashboardAddWorkbookButton" AutomationProperties.Name="Add workbook" />
+                    </Grid>
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                         <ItemsControl ItemsSource="{Binding Workbooks}">
                             <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
@@ -99,42 +103,43 @@
                     </ScrollViewer>
                 </Grid>
 
-                <Grid Visibility="{Binding CurrentPage, Converter={StaticResource PageVisibility}, ConverterParameter=Workbooks}">
+                <Grid Visibility="{Binding CurrentPage, Converter={StaticResource PageVisibility}, ConverterParameter=Workbooks}" AutomationProperties.AutomationId="WorkbooksPage">
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                    <DockPanel Margin="0,0,0,20">
-                        <StackPanel><TextBlock Style="{StaticResource PageTitle}" Text="Workbooks"/><TextBlock Style="{StaticResource MutedText}" Text="Pause tracking without deleting history, or permanently purge it separately."/></StackPanel>
-                        <Button DockPanel.Dock="Right" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource PrimaryButton}" Command="{Binding AddWorkbookCommand}" Content="＋ Add workbook" />
-                    </DockPanel>
+                    <Grid Margin="0,0,0,20">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <StackPanel Margin="0,0,16,0"><TextBlock Style="{StaticResource PageTitle}" Text="Workbooks" AutomationProperties.AutomationId="WorkbooksHeading"/><TextBlock Style="{StaticResource MutedText}" Text="Pause tracking without deleting history, or permanently purge it separately."/></StackPanel>
+                        <Button Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource PrimaryButton}" Command="{Binding AddWorkbookCommand}" Content="＋ Add workbook" AutomationProperties.AutomationId="WorkbooksAddWorkbookButton" AutomationProperties.Name="Add workbook" />
+                    </Grid>
                     <ListBox Grid.Row="1" ItemsSource="{Binding Workbooks}" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="Margin" Value="0,0,0,10"/><Setter Property="Focusable" Value="False"/></Style></ListBox.ItemContainerStyle>
                         <ListBox.ItemTemplate><DataTemplate>
                             <Border Style="{StaticResource Card}">
-                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                                     <StackPanel>
                                         <TextBlock FontWeight="SemiBold" FontSize="16" Text="{Binding Path}" TextTrimming="CharacterEllipsis" />
                                         <TextBlock Margin="0,5,0,0" Style="{StaticResource MutedText}" Text="{Binding ReportDirectory, StringFormat=Reports: {0}}" TextTrimming="CharacterEllipsis" />
                                         <TextBlock Margin="0,5,0,0" Style="{StaticResource MutedText}" Text="{Binding LastSummary}" />
                                         <TextBlock Margin="0,5,0,0" Foreground="{DynamicResource ErrorBrush}" Text="{Binding LastError}" />
                                     </StackPanel>
-                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <WrapPanel Grid.Row="1" Margin="0,14,0,0" VerticalAlignment="Center">
                                         <Button Margin="0,0,8,0" Style="{StaticResource SecondaryButton}" Command="{Binding DataContext.ToggleTrackingCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="{Binding IsEnabled, Converter={StaticResource TrackingAction}}" />
                                         <Button Margin="0,0,8,0" Style="{StaticResource SecondaryButton}" Command="{Binding DataContext.ChangeWorkbookReportFolderCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="Report folder…" />
                                         <Button Background="Transparent" Foreground="{DynamicResource ErrorBrush}" BorderBrush="{DynamicResource BorderBrush}" Padding="12,8" Command="{Binding DataContext.PurgeCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="Purge…" />
-                                    </StackPanel>
+                                    </WrapPanel>
                                 </Grid>
                             </Border>
                         </DataTemplate></ListBox.ItemTemplate>
                     </ListBox>
                 </Grid>
 
-                <Grid Visibility="{Binding CurrentPage, Converter={StaticResource PageVisibility}, ConverterParameter=History}">
+                <Grid Visibility="{Binding CurrentPage, Converter={StaticResource PageVisibility}, ConverterParameter=History}" AutomationProperties.AutomationId="HistoryPage">
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                    <StackPanel Margin="0,0,0,16"><TextBlock Style="{StaticResource PageTitle}" Text="History"/><TextBlock Style="{StaticResource MutedText}" Text="Every distinct post-baseline save, including saves with no tracked changes."/></StackPanel>
+                    <StackPanel Margin="0,0,0,16"><TextBlock Style="{StaticResource PageTitle}" Text="History" AutomationProperties.AutomationId="HistoryHeading"/><TextBlock Style="{StaticResource MutedText}" Text="Every distinct post-baseline save, including saves with no tracked changes."/></StackPanel>
                     <Border Grid.Row="1" Style="{StaticResource Card}" Padding="12" Margin="0,0,0,14">
                         <WrapPanel VerticalAlignment="Center">
                             <TextBlock Margin="0,5,12,0" FontWeight="SemiBold" Text="Filters"/>
-                            <ComboBox Width="190" Margin="0,0,10,0" ItemsSource="{Binding HistoryWorkbookOptions}" SelectedItem="{Binding SelectedHistoryWorkbook}" ToolTip="Workbook" AutomationProperties.Name="Filter history by workbook" />
-                            <CheckBox Margin="5" IsChecked="{Binding ShowValueHistory}" Content="Values" AutomationProperties.Name="Show value changes"/><CheckBox Margin="5" IsChecked="{Binding ShowFormulaHistory}" Content="Formulas" AutomationProperties.Name="Show formula changes"/><CheckBox Margin="5" IsChecked="{Binding ShowSheetHistory}" Content="Sheets" AutomationProperties.Name="Show sheet changes"/><CheckBox Margin="5" IsChecked="{Binding ShowErrors}" Content="Errors" AutomationProperties.Name="Show capture errors"/>
+                            <ComboBox Width="190" Margin="0,0,10,0" ItemsSource="{Binding HistoryWorkbookOptions}" SelectedItem="{Binding SelectedHistoryWorkbook}" ToolTip="Workbook" AutomationProperties.AutomationId="HistoryWorkbookFilter" AutomationProperties.Name="Filter history by workbook" />
+                            <CheckBox Margin="5" IsChecked="{Binding ShowValueHistory}" Content="Values" AutomationProperties.AutomationId="ShowValueHistoryCheckBox" AutomationProperties.Name="Show value changes"/><CheckBox Margin="5" IsChecked="{Binding ShowFormulaHistory}" Content="Formulas" AutomationProperties.AutomationId="ShowFormulaHistoryCheckBox" AutomationProperties.Name="Show formula changes"/><CheckBox Margin="5" IsChecked="{Binding ShowSheetHistory}" Content="Sheets" AutomationProperties.AutomationId="ShowSheetHistoryCheckBox" AutomationProperties.Name="Show sheet changes"/><CheckBox Margin="5" IsChecked="{Binding ShowErrors}" Content="Errors" AutomationProperties.AutomationId="ShowErrorsCheckBox" AutomationProperties.Name="Show capture errors"/>
                         </WrapPanel>
                     </Border>
                     <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
@@ -142,17 +147,19 @@
                             <ItemsControl ItemsSource="{Binding VersionsView}">
                                 <ItemsControl.ItemTemplate><DataTemplate>
                                     <Border Style="{StaticResource Card}" Margin="0,0,0,10">
-                                        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                        <Grid>
+                                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                                             <Border Width="38" Height="38" CornerRadius="19" Background="{DynamicResource AccentSoftBrush}"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource AccentBrush}" FontWeight="Bold" Text="↺"/></Border>
                                             <StackPanel Grid.Column="1" Margin="14,0">
                                                 <TextBlock FontWeight="SemiBold" Text="{Binding WorkbookPath}" TextTrimming="CharacterEllipsis" />
                                                 <TextBlock Margin="0,3,0,0" Style="{StaticResource MutedText}" Text="{Binding Summary}" />
                                                 <TextBlock Margin="0,3,0,0" Style="{StaticResource MutedText}"><Run Text="Version "/><Run Text="{Binding Sequence}"/><Run Text="  •  "/><Run Text="{Binding CapturedUtc, Converter={StaticResource UtcToLocal}}"/></TextBlock>
                                             </StackPanel>
-                                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <WrapPanel Grid.Row="1" Grid.Column="1" Margin="14,12,0,0" VerticalAlignment="Center">
                                                 <Button Margin="0,0,8,0" Style="{StaticResource SecondaryButton}" Command="{Binding DataContext.OpenReportCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="Open"/>
                                                 <Button Style="{StaticResource SecondaryButton}" Command="{Binding DataContext.ExportFullCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="Full export"/>
-                                            </StackPanel>
+                                            </WrapPanel>
                                         </Grid>
                                     </Border>
                                 </DataTemplate></ItemsControl.ItemTemplate>
@@ -169,21 +176,21 @@
                     </ScrollViewer>
                 </Grid>
 
-                <Grid Visibility="{Binding CurrentPage, Converter={StaticResource PageVisibility}, ConverterParameter=Settings}">
+                <Grid Visibility="{Binding CurrentPage, Converter={StaticResource PageVisibility}, ConverterParameter=Settings}" AutomationProperties.AutomationId="SettingsPage">
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                    <StackPanel Margin="0,0,0,18"><TextBlock Style="{StaticResource PageTitle}" Text="Settings"/><TextBlock Style="{StaticResource MutedText}" Text="Straightforward defaults, with per-workbook report locations available from Workbooks."/></StackPanel>
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"><StackPanel>
+                    <StackPanel Margin="0,0,0,18"><TextBlock Style="{StaticResource PageTitle}" Text="Settings" AutomationProperties.AutomationId="SettingsHeading"/><TextBlock Style="{StaticResource MutedText}" Text="Straightforward defaults, with per-workbook report locations available from Workbooks."/></StackPanel>
+                    <ScrollViewer x:Name="SettingsScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel>
                         <TextBlock Style="{StaticResource SectionTitle}" Text="General" Margin="2,0,0,8"/>
                         <Border Style="{StaticResource Card}" Padding="0">
                             <StackPanel>
-                                <Grid Margin="18,15"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock FontWeight="SemiBold" Text="Start with Windows"/><TextBlock Style="{StaticResource MutedText}" Text="Runs quietly in the tray for this Windows account."/></StackPanel><CheckBox Grid.Column="1" VerticalAlignment="Center" IsChecked="{Binding StartWithWindows}" Command="{Binding SaveStartupCommand}" AutomationProperties.Name="Start Excel Diff Tracker with Windows"/></Grid>
+                                <Grid Margin="18,15"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel Margin="0,0,16,0"><TextBlock FontWeight="SemiBold" Text="Start with Windows"/><TextBlock Style="{StaticResource MutedText}" Text="Runs quietly in the tray for this Windows account."/></StackPanel><CheckBox Grid.Column="1" VerticalAlignment="Center" IsChecked="{Binding StartWithWindows}" Command="{Binding SaveStartupCommand}" AutomationProperties.AutomationId="StartWithWindowsCheckBox" AutomationProperties.Name="Start Excel Diff Tracker with Windows"/></Grid>
                                 <Border Height="1" Background="{DynamicResource BorderBrush}"/>
-                                <Grid Margin="18,15"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock FontWeight="SemiBold" Text="Theme"/><TextBlock Style="{StaticResource MutedText}" Text="Light, dark, or follow Windows."/></StackPanel><ComboBox Grid.Column="1" Width="130" ItemsSource="{Binding Themes}" SelectedItem="{Binding SelectedTheme}" SelectionChanged="OnThemeChanged"/></Grid>
+                                <Grid Margin="18,15"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel Margin="0,0,16,0"><TextBlock FontWeight="SemiBold" Text="Theme"/><TextBlock Style="{StaticResource MutedText}" Text="Light, dark, or follow Windows."/></StackPanel><ComboBox x:Name="ThemeComboBox" Grid.Column="1" Width="130" ItemsSource="{Binding Themes}" SelectedItem="{Binding SelectedTheme}" SelectionChanged="OnThemeChanged" AutomationProperties.AutomationId="ThemeComboBox" AutomationProperties.Name="Application theme"/></Grid>
                             </StackPanel>
                         </Border>
                         <TextBlock Style="{StaticResource SectionTitle}" Text="Markdown reports" Margin="2,22,0,8"/>
                         <Border Style="{StaticResource Card}">
-                            <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock FontWeight="SemiBold" Text="Default report folder"/><TextBlock Margin="0,5,14,0" Style="{StaticResource MutedText}" Text="{Binding DefaultReportDirectory}" TextTrimming="CharacterEllipsis"/></StackPanel><Button Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource SecondaryButton}" Command="{Binding ChooseDefaultReportFolderCommand}" Content="Choose…"/></Grid>
+                            <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel Margin="0,0,16,0"><TextBlock FontWeight="SemiBold" Text="Default report folder"/><TextBlock Margin="0,5,0,0" Style="{StaticResource MutedText}" Text="{Binding DefaultReportDirectory}" TextTrimming="CharacterEllipsis" ToolTip="{Binding DefaultReportDirectory}"/></StackPanel><Button Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource SecondaryButton}" Command="{Binding ChooseDefaultReportFolderCommand}" Content="Choose…" AutomationProperties.AutomationId="ChooseDefaultReportFolderButton" AutomationProperties.Name="Choose default report folder"/></Grid>
                         </Border>
                         <TextBlock Style="{StaticResource SectionTitle}" Text="Watcher behavior" Margin="2,22,0,8"/>
                         <Border Style="{StaticResource Card}"><StackPanel><TextBlock FontWeight="SemiBold" Text="Balanced reliability"/><TextBlock Margin="0,5,0,0" Style="{StaticResource MutedText}" Text="File events are backed up by a 10-second reconciliation check. Locked saves retry for up to 60 seconds. Repeated hashes are ignored."/></StackPanel></Border>
@@ -192,17 +199,19 @@
                     </StackPanel></ScrollViewer>
                 </Grid>
 
-                <Grid Visibility="{Binding CurrentPage, Converter={StaticResource PageVisibility}, ConverterParameter=About}">
+                <Grid Visibility="{Binding CurrentPage, Converter={StaticResource PageVisibility}, ConverterParameter=About}" AutomationProperties.AutomationId="AboutPage">
+                    <ScrollViewer x:Name="AboutScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <StackPanel MaxWidth="650" HorizontalAlignment="Left">
-                        <TextBlock Style="{StaticResource PageTitle}" Text="About Excel Diff Tracker"/>
+                        <TextBlock Style="{StaticResource PageTitle}" Text="About Excel Diff Tracker" AutomationProperties.AutomationId="AboutHeading"/>
                         <TextBlock Style="{StaticResource MutedText}" Text="Private workbook change history for Windows 11 ARM64." Margin="0,0,0,22"/>
                         <Border Style="{StaticResource Card}"><StackPanel><TextBlock Style="{StaticResource SectionTitle}" Text="Local by design"/><TextBlock Margin="0,10,0,0" Text="Workbook processing, SQLite history, and Markdown reports stay on this PC. There is no account, cloud service, AI, API, telemetry, or Excel add-in."/><TextBlock Margin="0,14,0,0" Style="{StaticResource MutedText}" Text="MIT licensed • Version 0.1.1"/></StackPanel></Border>
                         <Border Style="{StaticResource Card}" Margin="0,14,0,0"><StackPanel><TextBlock Style="{StaticResource SectionTitle}" Text="What version 1 tracks"/><TextBlock Margin="0,10,0,0" Text="Values, exact stored formulas, calculated results, data types, and sheet structure. Styles, colors, comments, charts, and names are deliberately ignored."/></StackPanel></Border>
                     </StackPanel>
+                    </ScrollViewer>
                 </Grid>
             </Grid>
 
-            <Border HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="24" Padding="15,11" CornerRadius="9" Background="{Binding ToastIsError, Converter={StaticResource ToastBrush}}" Visibility="{Binding ToastVisible, Converter={StaticResource BoolVisibility}}" AutomationProperties.LiveSetting="Polite" AutomationProperties.Name="{Binding ToastMessage}" Panel.ZIndex="20">
+            <Border HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="24" Padding="15,11" CornerRadius="9" Background="{Binding ToastIsError, Converter={StaticResource ToastBrush}}" Visibility="{Binding ToastVisible, Converter={StaticResource BoolVisibility}}" AutomationProperties.AutomationId="StatusToast" AutomationProperties.LiveSetting="Polite" AutomationProperties.Name="{Binding ToastMessage}" Panel.ZIndex="20">
                 <StackPanel Orientation="Horizontal"><TextBlock Foreground="{DynamicResource PrimaryForegroundBrush}" FontWeight="Bold" Text="{Binding ToastIsError, Converter={StaticResource ToastIcon}}" Margin="0,0,8,0"/><TextBlock Foreground="{DynamicResource PrimaryForegroundBrush}" MaxWidth="430" Text="{Binding ToastMessage}"/></StackPanel>
             </Border>
         </Grid>
