@@ -1,0 +1,17 @@
+PackageIdentifier: yogoldy.ExcelDiffTracker
+PackageVersion: 0.1.0
+InstallerType: inno
+Scope: user
+UpgradeBehavior: install
+InstallModes:
+  - interactive
+  - silent
+InstallerSwitches:
+  Silent: /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+  SilentWithProgress: /SILENT /SUPPRESSMSGBOXES /NORESTART
+Installers:
+  - Architecture: arm64
+    InstallerUrl: https://github.com/yogoldy/excel-diff-tracker/releases/download/v0.1.0/ExcelDiffTracker-Setup-arm64.exe
+    InstallerSha256: EEA7ED16FD3ABD0E617B507983CF7642BF215BF2CE02BDFC48EE5728EEFB532D
+ManifestType: installer
+ManifestVersion: 1.10.0

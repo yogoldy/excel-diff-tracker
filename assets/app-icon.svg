@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Excel Diff Tracker icon</title>
+  <desc id="desc">A workbook page with a small change-history dial</desc>
+  <rect width="256" height="256" rx="58" fill="#287A68"/>
+  <path d="M61 40h99l35 35v139H61z" fill="#F9F7F1" stroke="#173D36" stroke-width="10" stroke-linejoin="round"/>
+  <path d="M160 40v35h35" fill="#CBE2DA" stroke="#173D36" stroke-width="10" stroke-linejoin="round"/>
+  <path d="M86 100h66M86 130h52M86 160h39" fill="none" stroke="#287A68" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="171" cy="171" r="48" fill="#2D84AA" stroke="#173D36" stroke-width="10"/>
+  <path d="M171 143v30l21 13" fill="none" stroke="#FFF" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M132 153a48 48 0 0 1 21-24" fill="none" stroke="#FFF" stroke-width="9" stroke-linecap="round"/>
+  <path d="m135 137-3 16 16-3" fill="#FFF"/>
+</svg>

@@ -1,0 +1,80 @@
+<Window x:Class="ExcelDiffTracker.App.OnboardingWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Welcome to Excel Diff Tracker" Width="710" Height="540" MinWidth="620" MinHeight="460" ResizeMode="CanResize"
+        WindowStartupLocation="CenterScreen" ShowInTaskbar="True">
+    <Grid Margin="34">
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+
+        <Grid>
+            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal">
+                <Border Width="38" Height="38" Background="{DynamicResource AccentBrush}" CornerRadius="10"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="White" FontWeight="Bold" FontSize="18" Text="↺"/></Border>
+                <StackPanel Margin="12,0,0,0"><TextBlock FontWeight="SemiBold" FontSize="16" Text="Excel Diff Tracker"/><TextBlock Style="{StaticResource MutedText}" Text="Private change history, made simple."/></StackPanel>
+            </StackPanel>
+            <TextBlock Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource MutedText}" Text="{Binding StepLabel}"/>
+        </Grid>
+
+        <Grid Grid.Row="1" Margin="0,34,0,25">
+            <Grid x:Name="StepOne">
+                <StackPanel MaxWidth="540" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Border Width="72" Height="72" HorizontalAlignment="Center" Background="{DynamicResource AccentSoftBrush}" CornerRadius="36"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource AccentBrush}" FontSize="29" Text="⌂"/></Border>
+                    <TextBlock Margin="0,20,0,0" HorizontalAlignment="Center" FontSize="25" FontWeight="SemiBold" Text="Everything stays on this PC"/>
+                    <TextBlock Margin="0,13,0,0" TextAlignment="Center" Style="{StaticResource MutedText}" FontSize="14" Text="Workbooks are read from a temporary local copy. History is stored in a local SQLite database and Markdown files. Nothing is uploaded, and macros are never executed."/>
+                </StackPanel>
+            </Grid>
+
+            <Grid x:Name="StepTwo" Visibility="Collapsed">
+                <StackPanel MaxWidth="570" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <TextBlock HorizontalAlignment="Center" FontSize="25" FontWeight="SemiBold" Text="Choose a report folder"/>
+                    <TextBlock Margin="0,10,0,18" TextAlignment="Center" Style="{StaticResource MutedText}" Text="A readable Markdown report is written here after every distinct post-baseline save."/>
+                    <Border Style="{StaticResource Card}" Width="570">
+                        <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock VerticalAlignment="Center" Text="{Binding ReportFolder}" TextTrimming="CharacterEllipsis" ToolTip="{Binding ReportFolder}"/><Button Grid.Column="1" Margin="12,0,0,0" Style="{StaticResource SecondaryButton}" Click="ChooseReportFolder" Content="Choose…"/></Grid>
+                    </Border>
+                    <TextBlock x:Name="StepThreeStatus" Margin="0,12,0,0" HorizontalAlignment="Center" Foreground="{DynamicResource WarningBrush}" AutomationProperties.LiveSetting="Assertive" />
+                </StackPanel>
+            </Grid>
+
+            <Grid x:Name="StepThree" Visibility="Collapsed">
+                <StackPanel MaxWidth="570" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <TextBlock HorizontalAlignment="Center" FontSize="25" FontWeight="SemiBold" Text="Add your first workbook"/>
+                    <TextBlock Margin="0,10,0,18" TextAlignment="Center" Style="{StaticResource MutedText}" Text="Choosing a workbook creates a silent baseline. Reports begin only after its next distinct save."/>
+                    <Border Style="{StaticResource Card}" Width="570">
+                        <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock FontWeight="SemiBold" Text="{Binding WorkbookName}"/><TextBlock Margin="0,4,0,0" Style="{StaticResource MutedText}" Text="{Binding WorkbookPath}" TextTrimming="CharacterEllipsis" ToolTip="{Binding WorkbookPath}"/></StackPanel><Button Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center" Style="{StaticResource PrimaryButton}" Click="ChooseWorkbook" Content="Choose workbook…"/></Grid>
+                    </Border>
+                </StackPanel>
+            </Grid>
+
+            <Grid x:Name="StepFour" Visibility="Collapsed">
+                <StackPanel MaxWidth="570" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <TextBlock HorizontalAlignment="Center" FontSize="25" FontWeight="SemiBold" Text="Keep tracking effortless"/>
+                    <TextBlock Margin="0,10,0,18" TextAlignment="Center" Style="{StaticResource MutedText}" Text="These defaults can be changed later in Settings."/>
+                    <Border Style="{StaticResource Card}" Padding="0" Width="570">
+                        <StackPanel>
+                            <Grid Margin="18"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock FontWeight="SemiBold" Text="Start with Windows"/><TextBlock Style="{StaticResource MutedText}" Text="Runs quietly in the notification area."/></StackPanel><CheckBox x:Name="StartupCheck" Grid.Column="1" VerticalAlignment="Center" IsChecked="True" AutomationProperties.Name="Start Excel Diff Tracker with Windows"/></Grid>
+                            <Border Height="1" Background="{DynamicResource BorderBrush}"/>
+                            <Grid Margin="18"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock FontWeight="SemiBold" Text="Begin tracking now"/><TextBlock Style="{StaticResource MutedText}" Text="Your chosen workbook will receive a silent baseline."/></StackPanel><CheckBox x:Name="TrackingCheck" Grid.Column="1" VerticalAlignment="Center" IsChecked="True" IsEnabled="False" AutomationProperties.Name="Begin tracking the selected workbook"/></Grid>
+                        </StackPanel>
+                    </Border>
+                    <TextBlock x:Name="SetupStatus" Margin="0,14,0,0" HorizontalAlignment="Center" Foreground="{DynamicResource WarningBrush}"/>
+                </StackPanel>
+            </Grid>
+
+            <Grid x:Name="StepFive" Visibility="Collapsed">
+                <StackPanel MaxWidth="540" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Border Width="72" Height="72" HorizontalAlignment="Center" Background="{DynamicResource AccentSoftBrush}" CornerRadius="36"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource AccentBrush}" FontSize="32" FontWeight="Bold" Text="✓"/></Border>
+                    <TextBlock Margin="0,20,0,0" HorizontalAlignment="Center" FontSize="25" FontWeight="SemiBold" Text="Tracking is active"/>
+                    <TextBlock Margin="0,13,0,0" TextAlignment="Center" Style="{StaticResource MutedText}" FontSize="14" Text="You can close the main window whenever you like. Excel Diff Tracker keeps watching quietly from the notification area and will tell you when a save is captured."/>
+                </StackPanel>
+            </Grid>
+        </Grid>
+
+        <Grid Grid.Row="2">
+            <ProgressBar Height="4" VerticalAlignment="Top" Maximum="5" Value="{Binding StepNumber}" Foreground="{DynamicResource AccentBrush}" Background="{DynamicResource BorderBrush}"/>
+            <DockPanel Margin="0,22,0,0">
+                <Button x:Name="BackButton" DockPanel.Dock="Left" Style="{StaticResource SecondaryButton}" Click="Back" Content="Back" Visibility="Hidden"/>
+                <Button x:Name="NextButton" DockPanel.Dock="Right" HorizontalAlignment="Right" MinWidth="110" Style="{StaticResource PrimaryButton}" Click="Next" Content="Continue" IsDefault="True"/>
+            </DockPanel>
+        </Grid>
+    </Grid>
+</Window>

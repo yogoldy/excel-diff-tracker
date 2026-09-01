@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../ExcelDiffTracker.Core/ExcelDiffTracker.Core.csproj" />
+    <ProjectReference Include="../ExcelDiffTracker.Reporting/ExcelDiffTracker.Reporting.csproj" />
+    <ProjectReference Include="../ExcelDiffTracker.Storage/ExcelDiffTracker.Storage.csproj" />
+  </ItemGroup>
+</Project>

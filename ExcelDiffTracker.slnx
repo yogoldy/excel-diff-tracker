@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ExcelDiffTracker.App/ExcelDiffTracker.App.csproj" />
+    <Project Path="src/ExcelDiffTracker.Core/ExcelDiffTracker.Core.csproj" />
+    <Project Path="src/ExcelDiffTracker.Reporting/ExcelDiffTracker.Reporting.csproj" />
+    <Project Path="src/ExcelDiffTracker.Storage/ExcelDiffTracker.Storage.csproj" />
+    <Project Path="src/ExcelDiffTracker.Tracking/ExcelDiffTracker.Tracking.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ExcelDiffTracker.Tests/ExcelDiffTracker.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/ExcelDiffTracker.Smoke/ExcelDiffTracker.Smoke.csproj" />
+  </Folder>
+</Solution>
