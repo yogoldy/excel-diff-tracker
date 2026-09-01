@@ -27,7 +27,7 @@ Build the release, then run:
 .\scripts\test-installer.ps1 -InstallerPath .\artifacts\release\ExcelDiffTracker-Setup-arm64.exe
 ```
 
-This performs a silent per-user install, verifies the self-contained payload and startup entry, launches the app, and silently uninstalls it. User data is deliberately retained.
+Run this only in a clean test VM or Windows account with no existing Excel Diff Tracker installation. The script refuses to continue if the app is installed or running because it finishes by uninstalling the test copy. It performs a silent per-user install, verifies the self-contained payload and startup entry, launches the app with isolated first-run data, requires the onboarding window to open without a startup error, and silently uninstalls it. Existing history and reports are never read or changed.
 
 The exact release candidate has also been exercised with real Excel, a real macro-bearing workbook, a real password-encrypted workbook, and a generated 500,000-cell workbook on Windows 11 ARM64. See [VALIDATION.md](VALIDATION.md) for the recorded results.
 

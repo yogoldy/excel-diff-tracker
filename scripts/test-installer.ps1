@@ -18,7 +18,13 @@ if ($RequireNoDotnet -and (Get-Command dotnet -ErrorAction SilentlyContinue)) {
     throw 'dotnet is available on PATH; this run cannot prove a no-runtime installation.'
 }
 
-Get-Process ExcelDiffTracker -ErrorAction SilentlyContinue | Stop-Process -Force
+if (Get-Process ExcelDiffTracker -ErrorAction SilentlyContinue) {
+    throw 'Excel Diff Tracker is already running. Use a clean test VM or Windows account.'
+}
+if (Test-Path $installDirectory) {
+    throw 'An existing Excel Diff Tracker installation was found. This test installs and uninstalls the app, so use a clean test VM or Windows account.'
+}
+
 $installProcess = Start-Process -FilePath $installer -ArgumentList '/VERYSILENT', '/CURRENTUSER', '/SUPPRESSMSGBOXES', '/NORESTART', '/TASKS="startup"' -Wait -PassThru
 if ($installProcess.ExitCode -ne 0) { throw "Installer exited with code $($installProcess.ExitCode)." }
 if (-not (Test-Path $application)) { throw 'Installed application was not found.' }
@@ -31,11 +37,36 @@ if ((Get-FileHash $windowsSdkLicense -Algorithm SHA256).Hash -ne $expectedWindow
 $runValue = (Get-ItemProperty -Path $runKey -Name ExcelDiffTracker -ErrorAction Stop).ExcelDiffTracker
 if ($runValue -notmatch 'ExcelDiffTracker\.exe') { throw 'Startup registration is missing or invalid.' }
 
-$applicationProcess = Start-Process -FilePath $application -ArgumentList '--background' -PassThru
-Start-Sleep -Seconds 5
-if ($applicationProcess.HasExited) { throw "Installed application exited with code $($applicationProcess.ExitCode)." }
-$applicationProcess.Kill()
-$applicationProcess.WaitForExit()
+$testDataDirectory = Join-Path $env:TEMP "ExcelDiffTracker-InstallerSmoke-$([Guid]::NewGuid().ToString('N'))"
+$previousTestDataDirectory = $env:EXCEL_DIFF_TRACKER_TEST_DATA_DIRECTORY
+$applicationProcess = $null
+try {
+    $env:EXCEL_DIFF_TRACKER_TEST_DATA_DIRECTORY = $testDataDirectory
+    $applicationProcess = Start-Process -FilePath $application -PassThru
+    $deadline = [DateTime]::UtcNow.AddSeconds(15)
+    do {
+        Start-Sleep -Milliseconds 250
+        $applicationProcess.Refresh()
+        if ($applicationProcess.HasExited) {
+            throw "Installed application exited with code $($applicationProcess.ExitCode)."
+        }
+        $startupTitle = $applicationProcess.MainWindowTitle
+    } while ([string]::IsNullOrWhiteSpace($startupTitle) -and [DateTime]::UtcNow -lt $deadline)
+
+    if ($startupTitle -ne 'Welcome to Excel Diff Tracker') {
+        throw "First-run onboarding did not open successfully. Visible window: '$startupTitle'."
+    }
+}
+finally {
+    $env:EXCEL_DIFF_TRACKER_TEST_DATA_DIRECTORY = $previousTestDataDirectory
+    if ($applicationProcess -and -not $applicationProcess.HasExited) {
+        $applicationProcess.Kill()
+        $applicationProcess.WaitForExit()
+    }
+    if (Test-Path $testDataDirectory) {
+        Remove-Item $testDataDirectory -Recurse -Force
+    }
+}
 
 $uninstaller = Join-Path $installDirectory 'unins000.exe'
 if (-not (Test-Path $uninstaller)) { throw 'Uninstaller was not found.' }

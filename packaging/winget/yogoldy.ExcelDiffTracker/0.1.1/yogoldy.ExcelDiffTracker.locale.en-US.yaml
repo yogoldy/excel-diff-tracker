@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.10.0.schema.json
+
+PackageIdentifier: yogoldy.ExcelDiffTracker
+PackageVersion: 0.1.1
+PackageLocale: en-US
+Publisher: Leo Goldberg
+PublisherUrl: https://github.com/yogoldy
+PublisherSupportUrl: https://github.com/yogoldy/excel-diff-tracker/issues
+PackageName: Excel Diff Tracker
+PackageUrl: https://github.com/yogoldy/excel-diff-tracker
+License: MIT
+LicenseUrl: https://github.com/yogoldy/excel-diff-tracker/blob/main/LICENSE
+Copyright: Copyright (c) 2026 Leo Goldberg
+ShortDescription: Track semantic Excel workbook changes locally and write readable Markdown history.
+Description: A private Windows ARM64 tray application that watches .xlsx and .xlsm workbooks, stores semantic save history in local SQLite, and writes Markdown reports without uploading workbook data.
+Moniker: excel-diff-tracker
+Tags:
+  - diff
+  - excel
+  - local
+  - markdown
+  - spreadsheet
+  - workbook
+ReleaseNotesUrl: https://github.com/yogoldy/excel-diff-tracker/releases/tag/v0.1.1
+ManifestType: defaultLocale
+ManifestVersion: 1.10.0

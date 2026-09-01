@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.10.0.schema.json
+
+PackageIdentifier: yogoldy.ExcelDiffTracker
+PackageVersion: 0.1.1
+InstallerType: inno
+Scope: user
+UpgradeBehavior: install
+InstallModes:
+  - interactive
+  - silent
+InstallerSwitches:
+  Silent: /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+  SilentWithProgress: /SILENT /SUPPRESSMSGBOXES /NORESTART
+Installers:
+  - Architecture: arm64
+    InstallerUrl: https://github.com/yogoldy/excel-diff-tracker/releases/download/v0.1.1/ExcelDiffTracker-Setup-arm64.exe
+    InstallerSha256: 491F37DA829C4A167B5C1C4CD1BD908503E6A31CFC4B75819B45F0C5426FEFF6
+ManifestType: installer
+ManifestVersion: 1.10.0

@@ -7,6 +7,7 @@
     <Project Path="src/ExcelDiffTracker.Tracking/ExcelDiffTracker.Tracking.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/ExcelDiffTracker.App.Tests/ExcelDiffTracker.App.Tests.csproj" />
     <Project Path="tests/ExcelDiffTracker.Tests/ExcelDiffTracker.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">

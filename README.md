@@ -57,7 +57,7 @@ dotnet test .\ExcelDiffTracker.slnx -c Release --no-build
 To produce the self-contained ARM64 application and installer, install Inno Setup 7 and run:
 
 ```powershell
-.\scripts\build-release.ps1 -Version 0.1.0
+.\scripts\build-release.ps1 -Version 0.1.1
 ```
 
 Architecture and test details are in [Architecture](docs/ARCHITECTURE.md) and [Testing](docs/TESTING.md). The build-once promotion process is documented in [Releasing](docs/RELEASING.md).
