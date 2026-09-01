@@ -14,9 +14,10 @@ Validation was performed on 2026-08-31 and finalized on 2026-09-01 in a Windows 
 - Markdown safety: untrusted workbook text was prevented from creating active Markdown links or raw HTML in reports.
 - Installer: silent per-user installation, Start-menu integration, startup entry, launch, silent uninstall, and installed-file cleanup passed with the development .NET directory temporarily unavailable. User history is retained by design.
 - Release contents: the installer bundles the applicable .NET, WPF, Windows SDK for .NET, Open XML SDK, SQLitePCLRaw, and SQLite notices and license texts.
+- WinGet 1.29.290: the three-file manifest validated without warnings against the public GitHub release. WinGet downloaded the installer and independently verified its exact SHA-256.
 
 ## Deliberately outstanding
 
 - Manual visual and accessibility acceptance of onboarding, tray states, themes, keyboard navigation, high contrast, text truncation, and 200% scaling. Visual VM control was not used.
-- WinGet local-manifest installation against the public release URL, followed by submission to `microsoft/winget-pkgs`. Submission should wait until the manual visual acceptance is complete.
+- End-to-end WinGet local-manifest installation still needs manual SmartScreen approval because version 0.1.0 is unsigned. The automated CLI test was stopped at that prompt rather than bypassing Windows security. Submission to `microsoft/winget-pkgs` should wait until this and the manual visual acceptance are complete.
 - Code signing. Version 0.1.0 is unsigned and may trigger an unknown-publisher or SmartScreen warning.
