@@ -1,9 +1,10 @@
 param(
-    [string]$Configuration = "Release"
+    [string]$Configuration = "Release",
+    [string]$RepositoryRoot
 )
 
 $ErrorActionPreference = "Stop"
-$root = Split-Path -Parent $PSScriptRoot
+$root = if ($RepositoryRoot) { (Resolve-Path $RepositoryRoot).Path } else { Split-Path -Parent $PSScriptRoot }
 $artifactRoot = Join-Path $root "artifacts\live-excel-smoke"
 $toolOutput = Join-Path $root "artifacts\smoke-tool"
 $workbookPath = Join-Path $artifactRoot "LiveExcel.xlsx"

@@ -11,6 +11,7 @@
     <Project Path="tests/ExcelDiffTracker.Tests/ExcelDiffTracker.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">
+    <Project Path="tools/ExcelDiffTracker.AcceptanceProbe/ExcelDiffTracker.AcceptanceProbe.csproj" />
     <Project Path="tools/ExcelDiffTracker.Smoke/ExcelDiffTracker.Smoke.csproj" />
   </Folder>
 </Solution>

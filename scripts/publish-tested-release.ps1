@@ -4,6 +4,8 @@ param(
     [string]$Version = '0.1.1',
     [string]$Repository = 'yogoldy/excel-diff-tracker',
     [string]$ReleaseDirectory,
+    [Parameter(Mandatory = $true)]
+    [string]$AcceptanceDirectory,
     [switch]$Prerelease
 )
 
@@ -21,6 +23,15 @@ foreach ($required in @($installer, $checksumFile, $releaseNotes, $wingetManifes
 }
 
 $actualHash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToUpperInvariant()
+$acceptanceDirectoryPath = (Resolve-Path $AcceptanceDirectory).Path
+$approvalPath = Join-Path $acceptanceDirectoryPath 'approval.json'
+if (-not (Test-Path $approvalPath)) {
+    throw 'Acceptance approval is missing. Run scripts\acceptance\Test-AcceptanceEvidence.ps1 first.'
+}
+$approval = Get-Content $approvalPath -Raw | ConvertFrom-Json
+if ($approval.status -ne 'Approved' -or $approval.installerSha256.ToUpperInvariant() -ne $actualHash) {
+    throw 'Acceptance approval does not approve this exact installer.'
+}
 $checksumText = [System.IO.File]::ReadAllText($checksumFile)
 $manifestText = [System.IO.File]::ReadAllText($wingetManifest)
 $checksumEntries = @{}

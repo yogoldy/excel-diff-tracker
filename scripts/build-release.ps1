@@ -12,6 +12,8 @@ $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $solution = Join-Path $repositoryRoot 'ExcelDiffTracker.slnx'
 $artifacts = Join-Path $repositoryRoot 'artifacts'
 $publish = Join-Path $artifacts 'publish\win-arm64'
+$acceptanceTools = Join-Path $artifacts 'acceptance-tools\win-arm64'
+$smokeTool = Join-Path $artifacts 'smoke-tool'
 $branding = Join-Path $artifacts 'branding'
 $release = Join-Path $artifacts 'release'
 $icon = Join-Path $branding 'app-icon.ico'
@@ -19,7 +21,7 @@ $icon = Join-Path $branding 'app-icon.ico'
 if (Test-Path $artifacts) {
     Remove-Item $artifacts -Recurse -Force
 }
-New-Item -ItemType Directory -Path $publish, $branding, $release -Force | Out-Null
+New-Item -ItemType Directory -Path $publish, $acceptanceTools, $smokeTool, $branding, $release -Force | Out-Null
 
 & (Join-Path $PSScriptRoot 'generate-icon.ps1') -OutputPath $icon
 
@@ -33,6 +35,14 @@ if ($LASTEXITCODE -ne 0) { throw 'Tests failed.' }
 $appProject = Join-Path $repositoryRoot 'src\ExcelDiffTracker.App\ExcelDiffTracker.App.csproj'
 dotnet publish $appProject -c $Configuration -r win-arm64 --self-contained true --no-restore -o $publish "-p:Version=$Version" "-p:ApplicationIcon=$icon"
 if ($LASTEXITCODE -ne 0) { throw 'ARM64 publish failed.' }
+
+$acceptanceProbeProject = Join-Path $repositoryRoot 'tools\ExcelDiffTracker.AcceptanceProbe\ExcelDiffTracker.AcceptanceProbe.csproj'
+dotnet publish $acceptanceProbeProject -c $Configuration -r win-arm64 --self-contained true --no-restore -o $acceptanceTools
+if ($LASTEXITCODE -ne 0) { throw 'ARM64 acceptance-probe publish failed.' }
+
+$smokeProject = Join-Path $repositoryRoot 'tools\ExcelDiffTracker.Smoke\ExcelDiffTracker.Smoke.csproj'
+dotnet publish $smokeProject -c $Configuration -r win-arm64 --self-contained true --no-restore -o $smokeTool
+if ($LASTEXITCODE -ne 0) { throw 'ARM64 smoke-tool publish failed.' }
 
 Copy-Item (Join-Path $repositoryRoot 'LICENSE') $publish
 Copy-Item (Join-Path $repositoryRoot 'THIRD-PARTY-NOTICES.md') $publish
