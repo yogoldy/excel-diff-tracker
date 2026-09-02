@@ -140,10 +140,22 @@ foreach ($matrixPath in $matrixPaths) {
     $firstCaptured = [DateTime]::MinValue
     $lastCaptured = [DateTime]::MinValue
     if (-not [DateTime]::TryParse($matrix.firstCapturedUtc, [ref]$firstCaptured) -or -not [DateTime]::TryParse($matrix.capturedUtc, [ref]$lastCaptured) -or $firstCaptured -gt $lastCaptured -or $lastCaptured.ToUniversalTime() -gt [DateTime]::UtcNow.AddMinutes(5)) { throw "Visual matrix timestamps are missing or inconsistent: $($matrixPath.FullName)" }
+    $firstCaptured = $firstCaptured.ToUniversalTime()
+    $lastCaptured = $lastCaptured.ToUniversalTime()
+    $environmentCaptured = [DateTime]::MinValue
+    if (-not [DateTime]::TryParse($matrix.actualEnvironment.capturedUtc,[ref]$environmentCaptured)) { throw "Visual matrix environment timestamp is missing or invalid: $($matrixPath.FullName)" }
+    $environmentCaptured = $environmentCaptured.ToUniversalTime()
+    if ($environmentCaptured -gt $firstCaptured) { throw "Visual matrix environment was captured after state capture began: $($matrixPath.FullName)" }
     $stateNames = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $referencedFiles = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $previousStateCaptured = $firstCaptured
     foreach ($result in @($matrix.results)) {
         if (-not $stateNames.Add($result.state)) { throw "Duplicate state overwrote or shadowed fresh evidence: $($result.state) in $($matrixPath.FullName)" }
+        $stateCaptured = [DateTime]::MinValue
+        if (-not [DateTime]::TryParse($result.capturedUtc,[ref]$stateCaptured)) { throw "Visual state timestamp is missing or invalid: $($result.state) in $($matrixPath.FullName)" }
+        $stateCaptured = $stateCaptured.ToUniversalTime()
+        if ($stateCaptured -lt $firstCaptured -or $stateCaptured -gt $lastCaptured -or $stateCaptured -lt $previousStateCaptured) { throw "Visual state timestamp is outside the matrix interval or not monotonic: $($result.state) in $($matrixPath.FullName)" }
+        $previousStateCaptured = $stateCaptured
         if ($result.passed -ne $true -or @($result.geometryFailures).Count -ne 0 -or @($result.overlapFailures).Count -ne 0 -or @($result.accessibilityFailures).Count -ne 0 -or @($result.focusFailures).Count -ne 0 -or @($result.semanticFailures).Count -ne 0) { throw "Visual state has a failed machine assertion: $($result.state) in $($matrixPath.FullName)" }
         $tested = $result.testedWindowGeometry
         if ($null -eq $tested -or $tested.mode -ne $result.windowSizeMode -or $tested.verified -ne $true -or $tested.fullyInsideMonitorWorkingArea -ne $true -or -not (Test-GeometryInsideWorkingArea $tested)) { throw "Visual state trusts an unverified requested window-size label: $($result.state) in $($matrixPath.FullName)" }

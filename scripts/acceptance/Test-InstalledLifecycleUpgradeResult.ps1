@@ -33,6 +33,13 @@ function Require-Condition {
     if (-not $Condition) { throw "Invalid installed lifecycle/upgrade evidence: $Message" }
 }
 
+function Get-EvidenceUtc {
+    param([object] $Value,[string] $Name)
+    $parsed = [DateTime]::MinValue
+    Require-Condition (-not [string]::IsNullOrWhiteSpace([string]$Value) -and [DateTime]::TryParse([string]$Value,[ref]$parsed)) "$Name timestamp is missing or invalid"
+    $parsed.ToUniversalTime()
+}
+
 function Get-Hash {
     param([string] $Path)
     (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToUpperInvariant()
@@ -111,7 +118,14 @@ function Validate-BaselineProbeBundle {
 }
 
 function Validate-UiSet {
-    param([object[]] $Records,[string[]] $RequiredNames,[string] $Phase)
+    param(
+        [object[]] $Records,
+        [string[]] $RequiredNames,
+        [string] $Phase,
+        [DateTime] $PhaseStartedUtc,
+        [DateTime] $PhaseCompletedUtc
+    )
+    Require-Condition ($PhaseCompletedUtc -gt $PhaseStartedUtc) "$Phase boundaries are invalid"
     $names = @($Records | ForEach-Object { [string]$_.name })
     Require-Condition ($names.Count -eq @($names | Select-Object -Unique).Count) "$Phase UI evidence contains duplicate names"
     foreach ($name in $RequiredNames) {
@@ -120,7 +134,12 @@ function Validate-UiSet {
         $null = Resolve-EvidenceRecord $matches[0].screenshot
         $null = Resolve-EvidenceRecord $matches[0].uiaTree
     }
+    $previousCaptureUtc = $PhaseStartedUtc
     foreach ($record in $Records) {
+        $capturedUtc = Get-EvidenceUtc $record.capturedUtc "$Phase UI evidence '$($record.name)'"
+        Require-Condition ($capturedUtc -ge $PhaseStartedUtc -and $capturedUtc -le $PhaseCompletedUtc) "$Phase UI evidence '$($record.name)' falls outside its phase"
+        Require-Condition ($capturedUtc -ge $previousCaptureUtc) "$Phase UI evidence timestamps are not monotonic at '$($record.name)'"
+        $previousCaptureUtc = $capturedUtc
         $null = Resolve-EvidenceRecord $record.screenshot
         $null = Resolve-EvidenceRecord $record.uiaTree
     }
@@ -227,23 +246,40 @@ $expectedStartup = '"' + [string]$pre.paths.application + '" --background'
 Require-Condition ($pre.startup.expected -eq $expectedStartup -and $pre.startup.actual -ceq $expectedStartup -and $pending.expectedStartupValue -ceq $expectedStartup) 'exact startup HKCU value differs'
 Require-Condition ($pre.pendingProcess.executableSha256 -eq $candidateApplicationHash -and -not $pre.pendingProcess.mainWindowVisible -and $pre.pendingProcess.trayIconAutomationId -eq 'NotifyItemIcon') 'pending-logoff candidate tray/process proof differs'
 
+$preStarted = Get-EvidenceUtc $pre.startedUtc 'pre-logoff start'
+$preCompleted = Get-EvidenceUtc $pending.prePhaseCompletedUtc 'pre-logoff completion'
+$preResultCompleted = Get-EvidenceUtc $pre.phaseCompletedUtc 'pre-logoff result completion'
+$pendingCreated = Get-EvidenceUtc $pending.createdUtc 'pending-state creation'
+$postStarted = Get-EvidenceUtc $result.startedUtc 'post-logon start'
+$postCompleted = Get-EvidenceUtc $result.completedUtc 'post-logon completion'
+Require-Condition ($preCompleted -gt $preStarted -and $preResultCompleted -eq $preCompleted) 'pre-logoff result and pending completion timestamps differ or are unordered'
+Require-Condition ($pendingCreated -ge $preCompleted -and $pendingCreated -le $postCompleted) 'pending-state creation timestamp is outside the linked lifecycle'
+Require-Condition ($postCompleted -gt $postStarted -and $postStarted -gt $preCompleted) 'post-logon phase does not follow pre-logoff completion'
+
+$preLogonCaptured = Get-EvidenceUtc $pre.environment.preLogon.capturedUtc 'pre-logoff logon identity capture'
+$pendingPreLogonCaptured = Get-EvidenceUtc $pending.preLogon.capturedUtc 'pending pre-logoff logon identity capture'
+$resultPreLogonCaptured = Get-EvidenceUtc $result.environment.preLogon.capturedUtc 'result pre-logoff logon identity capture'
+$postLogonCaptured = Get-EvidenceUtc $result.environment.postLogon.capturedUtc 'post-logon identity capture'
+Require-Condition ($preLogonCaptured -eq $pendingPreLogonCaptured -and $preLogonCaptured -eq $resultPreLogonCaptured) 'pre-logoff logon identity capture timestamp differs across linked phases'
+Require-Condition ($preLogonCaptured -ge $preStarted -and $preLogonCaptured -le $preCompleted) 'pre-logoff logon identity was not captured within the pre-logoff phase'
+Require-Condition ($postLogonCaptured -ge $postStarted -and $postLogonCaptured -le $postCompleted) 'post-logon identity was not captured within the post-logon phase'
+
 Validate-UiSet @($pre.uiEvidence) @(
     'prior-onboarding-step-1','prior-onboarding-complete','prior-dashboard-baseline','prior-visible-excel-ctrl-s',
     'prior-dashboard-sequence-1','candidate-dashboard-preserved-sequence-1','candidate-visible-excel-ctrl-s',
-    'candidate-dashboard-sequence-2','candidate-pending-logoff-tray') 'pre-logoff'
-Validate-UiSet @($result.uiEvidence) @('post-logon-quiet-autostart-tray','post-logon-dashboard-sequence-2','post-logon-history-sequences-1-2') 'post-logon'
+    'candidate-dashboard-sequence-2','candidate-pending-logoff-tray') 'pre-logoff' $preStarted $preCompleted
+Validate-UiSet @($result.uiEvidence) @('post-logon-quiet-autostart-tray','post-logon-dashboard-sequence-2','post-logon-history-sequences-1-2') 'post-logon' $postStarted $postCompleted
 $preLog = Resolve-EvidenceRecord $pre.actionLog
 $postLog = Resolve-EvidenceRecord $result.actionLog
 Require-Condition ((Get-Content -LiteralPath $preLog -Raw) -match 'IN_PLACE_CANDIDATE_INSTALL_STARTED_NO_UNINSTALL_WAS_INVOKED' -and (Get-Content -LiteralPath $preLog -Raw) -match 'START_SCRIPT_DID_NOT_LOG_OFF') 'pre-logoff action log lacks the no-uninstall/external-logoff boundary'
 Require-Condition ((Get-Content -LiteralPath $postLog -Raw) -match 'POST_PHASE_STARTED_NO_PRODUCT_LAUNCH_PERFORMED' -and (Get-Content -LiteralPath $postLog -Raw) -match 'UNINSTALL_COMPLETE_LOCAL_HISTORY_RETAINED') 'post-logon action log lacks the auto-start observation/uninstall boundary'
 
-$preCompleted = [DateTime]::Parse([string]$pending.prePhaseCompletedUtc).ToUniversalTime()
-$postExplorer = [DateTime]::Parse([string]$result.environment.postLogon.explorerStartedUtc).ToUniversalTime()
-$autoStarted = [DateTime]::Parse([string]$result.autoStart.processStartedUtc).ToUniversalTime()
+$postExplorer = Get-EvidenceUtc $result.environment.postLogon.explorerStartedUtc 'post-logon Explorer start'
+$autoStarted = Get-EvidenceUtc $result.autoStart.processStartedUtc 'candidate auto-start'
 Require-Condition ($result.environment.preLogon.accountSid -eq $result.environment.postLogon.accountSid -and $result.environment.preLogon.accountName -eq $result.environment.postLogon.accountName) 'phases used different Windows accounts'
 Require-Condition ($result.environment.preLogon.logonSid -ne $result.environment.postLogon.logonSid) 'same token logon session was reused across phases'
 Require-Condition ($result.environment.preLogon.explorerProcessId -ne $result.environment.postLogon.explorerProcessId) 'same Explorer session was reused across phases'
-Require-Condition ($postExplorer -gt $preCompleted -and $autoStarted -ge $postExplorer -and $autoStarted -gt $preCompleted) 'new-logon shell/autostart timestamps do not follow the pre-logoff phase'
+Require-Condition ($postExplorer -gt $preCompleted -and $postExplorer -le $postLogonCaptured -and $autoStarted -ge $postExplorer -and $autoStarted -gt $preCompleted -and $autoStarted -le $postCompleted) 'new-logon shell/autostart timestamps do not follow the pre-logoff phase'
 Require-Condition ($result.autoStart.executableSha256 -eq $candidateApplicationHash -and $result.autoStart.welcomeWindowCount -eq 0 -and $result.autoStart.mainWindowCountBeforeTrayOpen -eq 0 -and $result.autoStart.trayIconAutomationId -eq 'NotifyItemIcon') 'quiet exact-hash auto-start/tray proof differs'
 
 $postLogonProbe = Validate-ProbeBundle -Bundle $result.exactState.postLogonProbe -Sequence 2 -ExpectedValue $candidateValue -ExpectedBeforeValue $priorValue -ExpectedKind 'LiteralChanged'
@@ -257,13 +293,11 @@ Require-Condition ($result.uninstall.databaseSha256Before -eq $result.uninstall.
 $null = Resolve-EvidenceRecord $result.uninstall.uninstaller
 Validate-DatabaseRecords @($result.uninstall.databaseEvidenceBefore) 'pre-uninstall database checkpoint'
 Validate-DatabaseRecords @($result.uninstall.databaseEvidenceAfter) 'post-uninstall retained database checkpoint'
-$uninstallStart = [DateTime]::Parse([string]$result.uninstall.startedUtc).ToUniversalTime()
-$uninstallEnd = [DateTime]::Parse([string]$result.uninstall.completedUtc).ToUniversalTime()
-Require-Condition ($uninstallEnd -gt $uninstallStart) 'uninstall timestamps are invalid'
+$uninstallStart = Get-EvidenceUtc $result.uninstall.startedUtc 'uninstall start'
+$uninstallEnd = Get-EvidenceUtc $result.uninstall.completedUtc 'uninstall completion'
+Require-Condition ($uninstallStart -ge $postStarted -and $uninstallEnd -gt $uninstallStart -and $uninstallEnd -le $postCompleted) 'uninstall timestamps are invalid or outside the post-logon phase'
 
-$started = [DateTime]::Parse([string]$result.startedUtc).ToUniversalTime()
-$completed = [DateTime]::Parse([string]$result.completedUtc).ToUniversalTime()
-Require-Condition ($completed -gt $started -and $result.durationSeconds -gt 0) 'final result timestamps are invalid'
+Require-Condition ($postCompleted -gt $postStarted -and $result.durationSeconds -gt 0) 'final result timestamps are invalid'
 Require-Condition ($result.checksumsPath -eq 'SHA256SUMS.txt') 'final result points to an unexpected checksum manifest'
 
 Write-Output "INSTALLED_LIFECYCLE_UPGRADE_VALID|result=$resultPath|evidenceId=$($result.evidenceId)"

@@ -474,11 +474,33 @@ if (@($lifecycleUpgradeValidation).Count -ne 1 -or [string]$lifecycleUpgradeVali
 }
 $lifecycleUpgradeResult = Get-Content $lifecycleUpgradeResults[0].FullName -Raw | ConvertFrom-Json
 $lifecycleUpgradePrePath = Join-Path (Split-Path -Parent $lifecycleUpgradeResults[0].FullName) 'pre-logoff.json'
+$lifecycleUpgradePendingPath = Join-Path (Split-Path -Parent $lifecycleUpgradeResults[0].FullName) 'pending-logoff.json'
 $lifecycleUpgradePre = Get-Content $lifecycleUpgradePrePath -Raw | ConvertFrom-Json
+$lifecycleUpgradePending = Get-Content $lifecycleUpgradePendingPath -Raw | ConvertFrom-Json
 $lifecycleUpgradeStartedUtc = [DateTime]::Parse([string]$lifecycleUpgradePre.startedUtc).ToUniversalTime()
 $lifecycleUpgradeCompletedUtc = [DateTime]::Parse([string]$lifecycleUpgradeResult.completedUtc).ToUniversalTime()
-if ($lifecycleUpgradeStartedUtc -lt $acceptanceCutoffDateTimeUtc -or $lifecycleUpgradeCompletedUtc -le $lifecycleUpgradeStartedUtc -or
-    $lifecycleUpgradeCompletedUtc -gt $validationStartedUtc.AddMinutes(5)) {
+$lifecycleUpgradeTimes = @(
+    $lifecycleUpgradeStartedUtc
+    [DateTime]::Parse([string]$lifecycleUpgradePre.phaseCompletedUtc).ToUniversalTime()
+    [DateTime]::Parse([string]$lifecycleUpgradePending.prePhaseCompletedUtc).ToUniversalTime()
+    [DateTime]::Parse([string]$lifecycleUpgradePending.createdUtc).ToUniversalTime()
+    [DateTime]::Parse([string]$lifecycleUpgradePre.environment.preLogon.capturedUtc).ToUniversalTime()
+    [DateTime]::Parse([string]$lifecycleUpgradePending.preLogon.capturedUtc).ToUniversalTime()
+    [DateTime]::Parse([string]$lifecycleUpgradeResult.environment.preLogon.capturedUtc).ToUniversalTime()
+    [DateTime]::Parse([string]$lifecycleUpgradeResult.startedUtc).ToUniversalTime()
+    [DateTime]::Parse([string]$lifecycleUpgradeResult.environment.postLogon.capturedUtc).ToUniversalTime()
+    [DateTime]::Parse([string]$lifecycleUpgradeResult.autoStart.processStartedUtc).ToUniversalTime()
+    [DateTime]::Parse([string]$lifecycleUpgradePre.candidate.installStartedUtc).ToUniversalTime()
+    [DateTime]::Parse([string]$lifecycleUpgradePre.candidate.installCompletedUtc).ToUniversalTime()
+    [DateTime]::Parse([string]$lifecycleUpgradeResult.uninstall.startedUtc).ToUniversalTime()
+    [DateTime]::Parse([string]$lifecycleUpgradeResult.uninstall.completedUtc).ToUniversalTime()
+    $lifecycleUpgradeCompletedUtc
+)
+foreach ($record in @($lifecycleUpgradePre.uiEvidence) + @($lifecycleUpgradeResult.uiEvidence)) {
+    $lifecycleUpgradeTimes += [DateTime]::Parse([string]$record.capturedUtc).ToUniversalTime()
+}
+if ($lifecycleUpgradeCompletedUtc -le $lifecycleUpgradeStartedUtc -or
+    @($lifecycleUpgradeTimes | Where-Object { $_ -lt $acceptanceCutoffDateTimeUtc -or $_ -gt $validationStartedUtc.AddMinutes(5) }).Count -ne 0) {
     throw 'Installed lifecycle/upgrade evidence predates the acceptance cutoff or has invalid aggregate timestamps.'
 }
 
@@ -502,7 +524,9 @@ $visualTimes = @([DateTime]::Parse([string]$visualContrast.capturedUtc).ToUniver
 foreach ($state in @($visualLifecycle.states)) { $visualTimes += [DateTime]::Parse([string]$state.capturedUtc).ToUniversalTime() }
 foreach ($matrixPath in $visualMatrices) {
     $matrix = Get-Content $matrixPath.FullName -Raw | ConvertFrom-Json
+    $visualTimes += [DateTime]::Parse([string]$matrix.actualEnvironment.capturedUtc).ToUniversalTime()
     $visualTimes += [DateTime]::Parse([string]$matrix.firstCapturedUtc).ToUniversalTime()
+    foreach ($result in @($matrix.results)) { $visualTimes += [DateTime]::Parse([string]$result.capturedUtc).ToUniversalTime() }
     $visualTimes += [DateTime]::Parse([string]$matrix.capturedUtc).ToUniversalTime()
     $visualTimes += [DateTime]::Parse([string]$matrix.humanReview.reviewedUtc).ToUniversalTime()
 }
@@ -511,7 +535,7 @@ if (@($visualTimes | Where-Object { $_ -lt $acceptanceCutoffDateTimeUtc -or $_ -
 }
 $latestEvidenceUtc = @(
     @($runSummaries | ForEach-Object { $_.finishedUtc })
-    @($lifecycleUpgradeCompletedUtc)
+    @($lifecycleUpgradeTimes)
     @($visualTimes)
     @($visualMatrices | ForEach-Object {
         $matrix = Get-Content $_.FullName -Raw | ConvertFrom-Json
