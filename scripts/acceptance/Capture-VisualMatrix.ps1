@@ -441,6 +441,8 @@ if (Test-Path $summaryPath -PathType Leaf) {
         $existing.humanReview.contrast = 'Pending'
         $existing.humanReview.clippingAndOverlap = 'Pending'
         $existing.humanReview.keyboardAndFocus = 'Pending'
+        if ($null -eq $existing.humanReview.PSObject.Properties['themeTransitions']) { $existing.humanReview | Add-Member -NotePropertyName themeTransitions -NotePropertyValue 'Pending' }
+        else { $existing.humanReview.themeTransitions = 'Pending' }
         $existing.humanReview.reviewer = $null
         $existing.humanReview.reviewedUtc = $null
         $existing.humanReview.notes = $null
@@ -578,7 +580,7 @@ $failedResults = @($results | Where-Object { -not $_.passed })
 $summary = [ordered]@{
     schemaVersion = 2; status = if ($failedResults.Count -eq 0) { 'MachineChecksPassedHumanReviewRequired' } else { 'Failed' }; captureSessionId = $sessionGuid; configuration = $configuration; operatorDisplayLabel = $OperatorDisplayLabel; expectedScalePercent = [int]$ExpectedScalePercent; windowsContrastThemeRequested = [bool]$WindowsContrastTheme
     installerSha256 = $expectedInstallerHash; installerPathAtCapture = $resolvedInstaller; applicationSha256 = $expectedApplicationHash; applicationPath = $product.Path; applicationProcessId = $product.Id; firstCapturedUtc = $firstCapturedUtc; capturedUtc = [DateTime]::UtcNow.ToString('O'); actualEnvironment = $environment; results = @($results)
-    humanReview = [ordered]@{ required = $true; contrast = 'Pending'; clippingAndOverlap = 'Pending'; keyboardAndFocus = 'Pending'; reviewer = $null; reviewedUtc = $null; notes = $null }
+    humanReview = [ordered]@{ required = $true; contrast = 'Pending'; clippingAndOverlap = 'Pending'; keyboardAndFocus = 'Pending'; themeTransitions = 'Pending'; reviewer = $null; reviewedUtc = $null; notes = $null }
 }
 Write-AcceptanceUtf8File -Path $summaryPath -Content ($summary | ConvertTo-Json -Depth 40)
 if ($summary.status -eq 'Failed') { throw "VISUAL_MATRIX_MACHINE_CHECK_FAILED|$summaryPath" }

@@ -93,6 +93,36 @@ scripts\acceptance\Capture-VisualMatrix.ps1 @common -CapturePhase Main -Expected
 
 Repeat the main phase after changing the real Windows display/theme state, update only `ExpectedScalePercent`, and use the same session/candidate identity. Use `-WindowSizeMode Minimum`, `Default`, and `Resized` across the set, and use `-WindowsContrastTheme` only while Windows actually reports a contrast theme. Supplemental calls use `-CapturePhase Supplemental -StateName <state>` after arranging the transient state; use `-UseDesktopRoot` for the open tray menu. Processing capture requires an exact visible product status of `Processing`, warning requires an exact `Warning` status, and error requires one recognized exact capture-error category/stage on the active History page; supply that exact value through `-ExpectedStateText`. Toast capture requires a visible named `StatusToast`; tray capture requires the three product-owned menu items; and long-path capture requires the accessible full path and HelpText. A state label or arbitrary product text is never accepted as evidence. Never reuse an evidence directory after a failed or partial candidate run.
 
+Create deterministic palette evidence from the exact `ThemeManager.cs` source used for the candidate build. The helper copies and hashes that source, independently calculates WCAG relative luminance and ratios for every reviewed foreground/background contract in both fixed themes, and fails below 4.5:1 for normal text or 3:1 for large text and essential UI:
+
+```powershell
+scripts\acceptance\New-VisualContrastEvidence.ps1 `
+  -EvidenceRoot <visual-evidence> `
+  -ThemeManagerSourcePath <candidate-checkout>\src\ExcelDiffTracker.App\Services\ThemeManager.cs `
+  -ExpectedInstallerSha256 <installer-sha256> `
+  -ExpectedApplicationSha256 <installed-exe-sha256> `
+  -CaptureSessionId $session
+```
+
+This numeric artifact covers only opaque Light/Dark resource colors. It cannot prove final rendered pixels after opacity, antialiasing, font rendering, images, overlays, or compositing. Windows high-contrast colors come from live `SystemColors` and are intentionally not replaced with made-up fixed ratios. Screenshot review remains mandatory for those render-level facts.
+
+On the disposable acceptance VM, run the lifecycle capture after the matrix while the application is open and Windows is in the declared initial state. It selects Light, Dark, and System in turn and gives each one a real executable stop/start with a new process identity. It then leaves System selected and waits for the operator to change the real Windows app theme and high-contrast setting while recording one unchanged product PID:
+
+```powershell
+scripts\acceptance\Capture-VisualLifecycleEvidence.ps1 `
+  -EvidenceRoot <visual-evidence> `
+  -InstallerPath <exact-installer.exe> `
+  -ExpectedInstallerSha256 <installer-sha256> `
+  -ExpectedApplicationSha256 <installed-exe-sha256> `
+  -CaptureSessionId $session `
+  -ExpectedInitialWindowsAppTheme Light `
+  -ExpectedChangedWindowsAppTheme Dark `
+  -ExpectedInitialHighContrast $false `
+  -ExpectedChangedHighContrast $true
+```
+
+The Light/Dark direction may be reversed, but high contrast must start off and then be enabled; otherwise the preceding app-theme change is not a meaningful rendered transition. Do not run this process-restart harness on a workstation or irreplaceable session: use the resettable acceptance VM. The restart proof uses `Stop-Process` followed by `Start-Process` against the same hashed installed executable, so it proves persisted settings across new operating-system processes but not graceful tray shutdown; the separate tray lifecycle test covers graceful Exit. For the live Windows transitions, the machine proves the registry/high-contrast change, the unchanged PID/start time, System selection, and hashes the before/after screenshot and UIA tree. UI Automation does not expose WPF brush pixels, so an independent human must confirm from the screenshot pairs that the running product actually redrew.
+
 After all phases, run:
 
 ```powershell
@@ -102,9 +132,9 @@ scripts\acceptance\Test-VisualMatrixBundle.ps1 `
   -ExpectedApplicationSha256 <installed-exe-sha256>
 ```
 
-This validator re-hashes every screenshot, UIA tree, focus manifest, and focus screenshot; requires all states/configurations; and fails on missing, overwritten, mixed-session, mislabeled, or machine-failed evidence. It never treats `Pending` as approval.
+This validator re-hashes every screenshot, UIA tree, focus manifest, focus screenshot, palette artifact, source copy, restart state, and transition state. It independently reparses palette colors and recalculates every ratio, requires new PIDs for all three theme restarts, requires both Windows transitions against one unchanged System-themed PID, and fails on missing, overwritten, mixed-session, mislabeled, unreferenced, or machine-failed evidence. It never treats `Pending` as approval.
 
-The independent visual/accessibility reviewer must inspect every screenshot and focus sequence for WCAG contrast, clipping/overlap/off-screen content, path ellipsis/tooltips, and a clearly visible keyboard focus indicator. Approval is explicit and fail-closed:
+The independent visual/accessibility reviewer must inspect every screenshot and focus sequence for rendered contrast, clipping/overlap/off-screen content, path ellipsis/tooltips, a clearly visible keyboard focus indicator, restart persistence, and visible redraw across both live Windows transitions. Approval is explicit and fail-closed:
 
 ```powershell
 scripts\acceptance\Approve-VisualMatrixBundle.ps1 `
@@ -113,10 +143,10 @@ scripts\acceptance\Approve-VisualMatrixBundle.ps1 `
   -ExpectedApplicationSha256 <installed-exe-sha256> `
   -Reviewer '<reviewer name>' `
   -Notes '<what was inspected and any finding disposition>' `
-  -ApproveContrast -ApproveClippingAndOverlap -ApproveKeyboardAndFocus
+  -ApproveContrast -ApproveClippingAndOverlap -ApproveKeyboardAndFocus -ApproveThemeTransitions
 ```
 
-Omitting any approval, reviewer identity, or substantive notes fails. The helper first validates the complete machine bundle, writes `Approved` only to that exact candidate/session, then validates it again with human approval required. Any later capture resets its matrix to pending and therefore invalidates aggregate release approval.
+Omitting any approval, reviewer identity, or substantive notes fails. Numeric palette success alone cannot substitute for rendered screenshot review. The helper first validates the complete machine bundle, writes `Approved` only to that exact candidate/session, then validates it again with human approval required. Any later capture resets its matrix to pending and therefore invalidates aggregate release approval.
 
 ### Soak
 

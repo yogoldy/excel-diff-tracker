@@ -36,6 +36,50 @@ function Assert-FileHash {
     if ($actual -ne $ExpectedHash.ToUpperInvariant()) { throw "Visual evidence hash mismatch: $Path" }
 }
 
+function Assert-ArtifactChecksum {
+    param([string] $ArtifactPath)
+    $checksumPath = [System.IO.Path]::ChangeExtension($ArtifactPath,'sha256')
+    if (-not (Test-Path $checksumPath -PathType Leaf)) { throw "Artifact checksum is missing: $checksumPath" }
+    $line = ([System.IO.File]::ReadAllText($checksumPath)).Trim()
+    $expectedName = [System.IO.Path]::GetFileName($ArtifactPath)
+    if ($line -notmatch ('^(?<hash>[A-Fa-f0-9]{64})  ' + [regex]::Escape($expectedName) + '$')) { throw "Artifact checksum has an invalid format: $checksumPath" }
+    Assert-FileHash $ArtifactPath $Matches['hash']
+}
+
+function Get-DeterministicPalette {
+    param([string] $Content,[string] $Name)
+    $block = [regex]::Match($Content,"(?s)${Name}Colors\s*=\s*new\s+Dictionary<string,\s*string>\s*\{(?<body>.*?)\};")
+    if (-not $block.Success) { throw "The captured source does not contain the deterministic $Name palette." }
+    $palette = [ordered]@{}
+    foreach ($entry in [regex]::Matches($block.Groups['body'].Value,'\["(?<key>[^"]+)"\]\s*=\s*"(?<color>#[0-9A-Fa-f]{6})"')) {
+        $key = $entry.Groups['key'].Value
+        if ($palette.Contains($key)) { throw "Duplicate captured $Name palette key: $key" }
+        $palette[$key] = $entry.Groups['color'].Value.ToUpperInvariant()
+    }
+    $required = @('AppBackgroundBrush','SidebarBrush','CardBrush','CardHoverBrush','TextBrush','MutedTextBrush','BorderBrush','AccentBrush','AccentSoftBrush','WarningBrush','ErrorBrush','PrimaryForegroundBrush')
+    foreach ($key in $required) { if (-not $palette.Contains($key)) { throw "The captured $Name palette is missing $key." } }
+    if ($palette.Count -ne $required.Count) { throw "The captured $Name palette has an unreviewed color resource." }
+    $palette
+}
+
+function Get-WcagLuminance {
+    param([string] $Color)
+    $values = @([Convert]::ToInt32($Color.Substring(1,2),16),[Convert]::ToInt32($Color.Substring(3,2),16),[Convert]::ToInt32($Color.Substring(5,2),16))
+    $linear = foreach ($value in $values) { $channel = $value / 255.0; if ($channel -le 0.04045) { $channel / 12.92 } else { [Math]::Pow((($channel + 0.055) / 1.055),2.4) } }
+    (0.2126 * $linear[0]) + (0.7152 * $linear[1]) + (0.0722 * $linear[2])
+}
+
+function Get-WcagRatio {
+    param([string] $Foreground,[string] $Background)
+    $first = Get-WcagLuminance $Foreground; $second = Get-WcagLuminance $Background
+    ([Math]::Max($first,$second) + 0.05) / ([Math]::Min($first,$second) + 0.05)
+}
+
+function New-ContrastContractItem {
+    param([string] $Id,[string] $Category,[string] $Foreground,[string] $Background,[double] $Threshold)
+    [pscustomobject]@{ id = $Id; category = $Category; foreground = $Foreground; background = $Background; threshold = $Threshold }
+}
+
 function Assert-CategoriesPresent {
     param([object[]] $Results, [string[]] $Categories)
     foreach ($category in $Categories) {
@@ -66,8 +110,8 @@ foreach ($matrixPath in $matrixPaths) {
     if ([string]::IsNullOrWhiteSpace($matrix.installerPathAtCapture) -or [string]::IsNullOrWhiteSpace($matrix.applicationPath)) { throw "Visual matrix did not record the exact installer and installed executable paths used at capture time: $($matrixPath.FullName)" }
     if ($matrix.status -eq 'Failed') { throw "Visual matrix contains a retained machine-check failure: $($matrixPath.FullName)" }
     if ($RequireHumanApproval) {
-        if ($matrix.status -ne 'Approved' -or $matrix.humanReview.required -ne $true -or $matrix.humanReview.contrast -ne 'Approved' -or $matrix.humanReview.clippingAndOverlap -ne 'Approved' -or $matrix.humanReview.keyboardAndFocus -ne 'Approved' -or [string]::IsNullOrWhiteSpace($matrix.humanReview.reviewer) -or [string]::IsNullOrWhiteSpace($matrix.humanReview.notes) -or [string]::IsNullOrWhiteSpace($matrix.humanReview.reviewedUtc)) {
-            throw "Visual matrix human contrast/clipping/focus review is incomplete: $($matrixPath.FullName)"
+        if ($matrix.status -ne 'Approved' -or $matrix.humanReview.required -ne $true -or $matrix.humanReview.contrast -ne 'Approved' -or $matrix.humanReview.clippingAndOverlap -ne 'Approved' -or $matrix.humanReview.keyboardAndFocus -ne 'Approved' -or $matrix.humanReview.themeTransitions -ne 'Approved' -or [string]::IsNullOrWhiteSpace($matrix.humanReview.reviewer) -or [string]::IsNullOrWhiteSpace($matrix.humanReview.notes) -or [string]::IsNullOrWhiteSpace($matrix.humanReview.reviewedUtc)) {
+            throw "Visual matrix human contrast/clipping/focus/theme-transition review is incomplete: $($matrixPath.FullName)"
         }
         if ($matrix.humanReview.reviewer.Trim().Length -lt 3 -or $matrix.humanReview.notes.Trim().Length -lt 20) { throw "Visual matrix human reviewer identity or notes were weakened after approval: $($matrixPath.FullName)" }
         $reviewedAt = [DateTime]::MinValue
@@ -145,6 +189,100 @@ foreach ($matrixPath in $matrixPaths) {
 }
 
 if ($sessionIds.Count -ne 1) { throw "Visual evidence mixes $($sessionIds.Count) capture-session IDs; use one fresh evidence session." }
+$captureSessionId = @($sessionIds)[0]
+
+$contrastArtifacts = @(Get-ChildItem $root -Filter 'visual-contrast.json' -File -Recurse)
+if ($contrastArtifacts.Count -ne 1) { throw "Expected exactly one hashed visual-contrast artifact; found $($contrastArtifacts.Count)." }
+$contrastPath = $contrastArtifacts[0].FullName; Assert-ArtifactChecksum $contrastPath
+$contrastDirectory = Split-Path -Parent $contrastPath
+$contrast = Get-Content $contrastPath -Raw | ConvertFrom-Json
+if ($contrast.schemaVersion -ne 1 -or $contrast.status -ne 'Passed' -or $contrast.failedCount -ne 0) { throw 'Deterministic Light/Dark palette contrast did not pass.' }
+$contrastTime = [DateTime]::MinValue
+if (-not [DateTime]::TryParse($contrast.capturedUtc,[ref]$contrastTime) -or $contrastTime.ToUniversalTime() -gt [DateTime]::UtcNow.AddMinutes(5)) { throw 'Contrast evidence timestamp is invalid.' }
+if ($contrast.captureSessionId -ne $captureSessionId -or $contrast.installerSha256 -ne $installerHash -or $contrast.applicationSha256 -ne $applicationHash) { throw 'Contrast evidence does not belong to the frozen candidate/session.' }
+$contrastSource = Resolve-EvidenceFile $contrastDirectory $contrast.source.relativePath
+Assert-FileHash $contrastSource $contrast.source.sha256
+$sourceContent = [System.IO.File]::ReadAllText($contrastSource)
+$parsedPalettes = [ordered]@{ Light = Get-DeterministicPalette $sourceContent 'Light'; Dark = Get-DeterministicPalette $sourceContent 'Dark' }
+$contract = @(
+    New-ContrastContractItem 'body-on-app' 'normal-text' 'TextBrush' 'AppBackgroundBrush' 4.5
+    New-ContrastContractItem 'body-on-sidebar' 'normal-text' 'TextBrush' 'SidebarBrush' 4.5
+    New-ContrastContractItem 'body-on-card' 'normal-text' 'TextBrush' 'CardBrush' 4.5
+    New-ContrastContractItem 'body-on-hover' 'normal-text' 'TextBrush' 'CardHoverBrush' 4.5
+    New-ContrastContractItem 'body-on-accent-soft' 'normal-text' 'TextBrush' 'AccentSoftBrush' 4.5
+    New-ContrastContractItem 'muted-on-app' 'normal-text' 'MutedTextBrush' 'AppBackgroundBrush' 4.5
+    New-ContrastContractItem 'muted-on-sidebar' 'normal-text' 'MutedTextBrush' 'SidebarBrush' 4.5
+    New-ContrastContractItem 'muted-on-card' 'normal-text' 'MutedTextBrush' 'CardBrush' 4.5
+    New-ContrastContractItem 'muted-on-hover' 'normal-text' 'MutedTextBrush' 'CardHoverBrush' 4.5
+    New-ContrastContractItem 'primary-label' 'normal-text' 'PrimaryForegroundBrush' 'AccentBrush' 4.5
+    New-ContrastContractItem 'warning-label' 'normal-text' 'WarningBrush' 'CardBrush' 4.5
+    New-ContrastContractItem 'error-label' 'normal-text' 'ErrorBrush' 'CardBrush' 4.5
+    New-ContrastContractItem 'page-title' 'large-text' 'TextBrush' 'AppBackgroundBrush' 3.0
+    New-ContrastContractItem 'section-title' 'large-text' 'TextBrush' 'CardBrush' 3.0
+    New-ContrastContractItem 'border-on-card' 'essential-ui' 'BorderBrush' 'CardBrush' 3.0
+    New-ContrastContractItem 'border-on-app' 'essential-ui' 'BorderBrush' 'AppBackgroundBrush' 3.0
+    New-ContrastContractItem 'focus-on-card' 'essential-ui' 'AccentBrush' 'CardBrush' 3.0
+    New-ContrastContractItem 'focus-on-sidebar' 'essential-ui' 'AccentBrush' 'SidebarBrush' 3.0
+    New-ContrastContractItem 'primary-fill-on-app' 'essential-ui' 'AccentBrush' 'AppBackgroundBrush' 3.0
+    New-ContrastContractItem 'primary-fill-on-card' 'essential-ui' 'AccentBrush' 'CardBrush' 3.0
+    New-ContrastContractItem 'primary-focus-on-fill' 'essential-ui' 'TextBrush' 'AccentBrush' 3.0
+    New-ContrastContractItem 'warning-symbol' 'essential-ui' 'WarningBrush' 'CardBrush' 3.0
+    New-ContrastContractItem 'error-symbol' 'essential-ui' 'ErrorBrush' 'CardBrush' 3.0
+)
+if (@($contrast.checks).Count -ne ($contract.Count * 2)) { throw 'Contrast artifact does not contain the exact reviewed Light/Dark contract.' }
+foreach ($theme in @('Light','Dark')) {
+    foreach ($key in $parsedPalettes[$theme].Keys) {
+        if ($contrast.palettes.$theme.$key -ne $parsedPalettes[$theme][$key]) { throw "Contrast palette value differs from its captured source: $theme/$key" }
+    }
+    foreach ($item in $contract) {
+        $matches = @($contrast.checks | Where-Object { $_.theme -eq $theme -and $_.id -eq $item.id })
+        if ($matches.Count -ne 1) { throw "Contrast evidence must contain exactly one $theme/$($item.id) check." }
+        $check = $matches[0]; $foreground = $parsedPalettes[$theme][$item.foreground]; $background = $parsedPalettes[$theme][$item.background]
+        $ratio = Get-WcagRatio $foreground $background; $rounded = [Math]::Round($ratio,4)
+        if ($check.category -ne $item.category -or $check.foregroundResource -ne $item.foreground -or $check.backgroundResource -ne $item.background -or $check.foreground -ne $foreground -or $check.background -ne $background -or [double]$check.threshold -ne $item.threshold -or [Math]::Abs([double]$check.ratio - $rounded) -gt 0.00005 -or $check.passed -ne $true -or $ratio -lt $item.threshold) { throw "WCAG contrast assertion failed or was altered: $theme/$($item.id)." }
+    }
+}
+$contrastFiles = @(Get-ChildItem $contrastDirectory -File)
+if ($contrastFiles.Count -ne 3) { throw 'Contrast evidence contains missing or unreviewed files.' }
+
+$lifecycleArtifacts = @(Get-ChildItem $root -Filter 'visual-lifecycle.json' -File -Recurse)
+if ($lifecycleArtifacts.Count -ne 1) { throw "Expected exactly one hashed visual-lifecycle artifact; found $($lifecycleArtifacts.Count)." }
+$lifecyclePath = $lifecycleArtifacts[0].FullName; Assert-ArtifactChecksum $lifecyclePath
+$lifecycleDirectory = Split-Path -Parent $lifecyclePath
+$lifecycle = Get-Content $lifecyclePath -Raw | ConvertFrom-Json
+if ($lifecycle.schemaVersion -ne 1 -or $lifecycle.status -ne 'MachineObservationPassedHumanRenderReviewRequired' -or $lifecycle.transition.passed -ne $true) { throw 'Visual lifecycle machine observation did not pass.' }
+if ($lifecycle.captureSessionId -ne $captureSessionId -or $lifecycle.installerSha256 -ne $installerHash -or $lifecycle.applicationSha256 -ne $applicationHash) { throw 'Lifecycle evidence does not belong to the frozen candidate/session.' }
+if ([string]::IsNullOrWhiteSpace($lifecycle.restartMethodLimitation) -or [string]::IsNullOrWhiteSpace($lifecycle.transitionRenderLimitation)) { throw 'Lifecycle evidence concealed its process-termination or rendered-pixel limitation.' }
+if (@($lifecycle.restarts).Count -ne 3 -or @($lifecycle.states).Count -ne 9) { throw 'Lifecycle evidence must contain exactly three restarts and nine fresh states.' }
+$stateMap = @{}; $lifecycleFiles = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+[void]$lifecycleFiles.Add($lifecyclePath); [void]$lifecycleFiles.Add([System.IO.Path]::ChangeExtension($lifecyclePath,'sha256'))
+foreach ($state in @($lifecycle.states)) {
+    if ($stateMap.ContainsKey($state.name)) { throw "Duplicate lifecycle state: $($state.name)" }
+    $stateTime = [DateTime]::MinValue; $processTime = [DateTime]::MinValue
+    if (-not [DateTime]::TryParse($state.capturedUtc,[ref]$stateTime) -or -not [DateTime]::TryParse($state.processStartUtc,[ref]$processTime) -or $processTime.ToUniversalTime() -gt $stateTime.ToUniversalTime() -or $stateTime.ToUniversalTime() -gt [DateTime]::UtcNow.AddMinutes(5)) { throw "Invalid lifecycle timestamp: $($state.name)" }
+    if ($state.applicationSha256 -ne $applicationHash -or [int]$state.processId -le 0 -or [string]::IsNullOrWhiteSpace($state.applicationPath)) { throw "Invalid lifecycle process identity: $($state.name)" }
+    $screenshot = Resolve-EvidenceFile $lifecycleDirectory $state.screenshot; Assert-FileHash $screenshot $state.screenshotSha256; [void]$lifecycleFiles.Add($screenshot)
+    $tree = Resolve-EvidenceFile $lifecycleDirectory $state.uiaTree; Assert-FileHash $tree $state.uiaTreeSha256; [void]$lifecycleFiles.Add($tree)
+    $stateMap[$state.name] = $state
+}
+foreach ($theme in @('Light','Dark','System')) {
+    $restart = @($lifecycle.restarts | Where-Object { $_.theme -eq $theme })
+    if ($restart.Count -ne 1 -or $restart[0].passed -ne $true -or $restart[0].graceful -ne $false) { throw "Missing fail-closed $theme real-process restart evidence." }
+    $before = $stateMap[$restart[0].beforeState]; $after = $stateMap[$restart[0].afterState]
+    if ($null -eq $before -or $null -eq $after -or $before.selectedTheme -ne $theme -or $after.selectedTheme -ne $theme -or $before.processId -eq $after.processId -or $before.processStartUtc -eq $after.processStartUtc -or ([DateTime]$before.capturedUtc).ToUniversalTime() -ge ([DateTime]$after.capturedUtc).ToUniversalTime()) { throw "$theme selection was not proved across a new application process." }
+}
+$transitionStates = @($stateMap[$lifecycle.transition.initialState],$stateMap[$lifecycle.transition.appThemeChangedState],$stateMap[$lifecycle.transition.highContrastChangedState])
+if (@($transitionStates | Where-Object { $null -eq $_ }).Count -ne 0) { throw 'Lifecycle transition references a missing captured state.' }
+foreach ($state in $transitionStates) {
+    if ($state.processId -ne $lifecycle.transition.processId -or $state.processStartUtc -ne $lifecycle.transition.processStartUtc -or $state.selectedTheme -ne 'System') { throw 'Windows transitions were not captured against one unchanged, System-themed product process.' }
+}
+if ($transitionStates[0].windowsAppTheme -notin @('Light','Dark') -or $transitionStates[1].windowsAppTheme -notin @('Light','Dark') -or $transitionStates[0].windowsAppTheme -eq $transitionStates[1].windowsAppTheme -or $transitionStates[0].highContrast -ne $false -or $transitionStates[1].highContrast -ne $false -or $transitionStates[2].highContrast -ne $true) { throw 'The recorded Windows app-theme/high-contrast transitions are not the required meaningful state changes.' }
+$systemRestart = @($lifecycle.restarts | Where-Object { $_.theme -eq 'System' })[0]
+if ($stateMap[$systemRestart.afterState].processId -ne $transitionStates[0].processId -or ([DateTime]$transitionStates[0].capturedUtc).ToUniversalTime() -ge ([DateTime]$transitionStates[1].capturedUtc).ToUniversalTime() -or ([DateTime]$transitionStates[1].capturedUtc).ToUniversalTime() -ge ([DateTime]$transitionStates[2].capturedUtc).ToUniversalTime()) { throw 'Lifecycle transition ordering or binding to the final System restart is invalid.' }
+$actualLifecycleFiles = @(Get-ChildItem $lifecycleDirectory -File)
+if ($actualLifecycleFiles.Count -ne $lifecycleFiles.Count) { throw 'Lifecycle evidence contains missing or unreviewed files.' }
+foreach ($file in $actualLifecycleFiles) { if (-not $lifecycleFiles.Contains($file.FullName)) { throw "Unreferenced lifecycle evidence file: $($file.FullName)" } }
+
 if ($RequireHumanApproval -and ($humanReviewers.Count -ne 1 -or $humanReviewTimes.Count -ne 1)) { throw 'All matrices must carry the same independent reviewer identity and one approval timestamp from the bundle approval operation.' }
 
 $requiredScales = @(100,125,150,200)

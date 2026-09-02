@@ -7,15 +7,16 @@ param(
     [Parameter(Mandatory)] [ValidateNotNullOrEmpty()] [string] $Notes,
     [Parameter(Mandatory)] [switch] $ApproveContrast,
     [Parameter(Mandatory)] [switch] $ApproveClippingAndOverlap,
-    [Parameter(Mandatory)] [switch] $ApproveKeyboardAndFocus
+    [Parameter(Mandatory)] [switch] $ApproveKeyboardAndFocus,
+    [Parameter(Mandatory)] [switch] $ApproveThemeTransitions
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'UiAutomation.psm1') -Force
 
-if (-not $ApproveContrast -or -not $ApproveClippingAndOverlap -or -not $ApproveKeyboardAndFocus) {
-    throw 'Human review is fail-closed: contrast, clipping/overlap, and keyboard/focus must each be explicitly approved.'
+if (-not $ApproveContrast -or -not $ApproveClippingAndOverlap -or -not $ApproveKeyboardAndFocus -or -not $ApproveThemeTransitions) {
+    throw 'Human review is fail-closed: contrast, clipping/overlap, keyboard/focus, and live theme-transition rendering must each be explicitly approved.'
 }
 if ($Reviewer.Trim().Length -lt 3) { throw 'Name the human visual/accessibility reviewer.' }
 if ($Notes.Trim().Length -lt 20) { throw 'Review notes must describe what was checked (minimum 20 characters).' }
@@ -34,6 +35,8 @@ foreach ($matrixPath in $matrixPaths) {
     $matrix.humanReview.contrast = 'Approved'
     $matrix.humanReview.clippingAndOverlap = 'Approved'
     $matrix.humanReview.keyboardAndFocus = 'Approved'
+    if ($null -eq $matrix.humanReview.PSObject.Properties['themeTransitions']) { $matrix.humanReview | Add-Member -NotePropertyName themeTransitions -NotePropertyValue 'Approved' }
+    else { $matrix.humanReview.themeTransitions = 'Approved' }
     $matrix.humanReview.reviewer = $Reviewer.Trim()
     $matrix.humanReview.reviewedUtc = $reviewedUtc
     $matrix.humanReview.notes = $Notes.Trim()
