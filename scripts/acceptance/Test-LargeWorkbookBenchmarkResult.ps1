@@ -7,11 +7,12 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSScriptRoot 'UiAutomation.psm1') -Force
 
 $path = (Resolve-Path $ResultPath).Path
 $root = Split-Path -Parent $path
 $installer = (Resolve-Path $InstallerPath).Path
-$installerHash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToUpperInvariant()
+$installerHash = Get-AcceptanceFileSha256 -Path $installer
 $expectedApplicationHash = $ExpectedApplicationSha256.ToUpperInvariant()
 $result = Get-Content $path -Raw | ConvertFrom-Json
 
@@ -25,8 +26,7 @@ function Resolve-EvidenceFile {
     Require-Condition -Condition (-not [string]::IsNullOrWhiteSpace($RelativePath)) -Message 'an evidence path is empty'
     Require-Condition -Condition (-not [System.IO.Path]::IsPathRooted($RelativePath)) -Message "evidence path must be relative: $RelativePath"
     $fullPath = [System.IO.Path]::GetFullPath((Join-Path $root $RelativePath))
-    $relative = [System.IO.Path]::GetRelativePath($root, $fullPath)
-    Require-Condition -Condition (-not $relative.StartsWith("..$([System.IO.Path]::DirectorySeparatorChar)", [StringComparison]::Ordinal) -and $relative -ne '..') -Message "evidence path escapes the benchmark directory: $RelativePath"
+    $null = Get-AcceptanceRelativePath -BasePath $root -Path $fullPath
     Require-Condition -Condition (Test-Path $fullPath -PathType Leaf) -Message "evidence file is missing: $RelativePath"
     $fullPath
 }
@@ -180,7 +180,7 @@ for ($index = 0; $index -lt $expected.Count; $index++) {
 
 $hashes = @($phases | Select-Object -ExpandProperty workbookSha256 -Unique)
 Require-Condition ($hashes.Count -eq 5) 'baseline and four saves must have five distinct stable hashes'
-Require-Condition ((Get-FileHash $fixturePath -Algorithm SHA256).Hash.ToUpperInvariant() -eq $phases[4].workbookSha256) 'final fixture bytes do not match sequence 4'
+Require-Condition ((Get-AcceptanceFileSha256 -Path $fixturePath) -eq $phases[4].workbookSha256) 'final fixture bytes do not match sequence 4'
 $bulk = $phases[4]
 Require-Condition ($bulk.fullExport.exportedViaInstalledUi) 'full Markdown export was not driven through the installed UI'
 Require-Condition ($bulk.fullExport.cellHeadingCount -eq 10000) 'full export does not contain all 10,000 cell details'

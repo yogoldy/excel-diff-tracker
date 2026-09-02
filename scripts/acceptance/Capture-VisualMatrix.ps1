@@ -51,8 +51,8 @@ function Capture-State {
         state = $Name
         passed = $geometryFailures.Count -eq 0
         geometryFailures = $geometryFailures
-        screenshot = [System.IO.Path]::GetRelativePath($output, $png).Replace('\','/')
-        uiaTree = [System.IO.Path]::GetRelativePath($output, $json).Replace('\','/')
+        screenshot = Get-AcceptanceRelativePath -BasePath $output -Path $png -UseForwardSlash
+        uiaTree = Get-AcceptanceRelativePath -BasePath $output -Path $json -UseForwardSlash
     })
 }
 
@@ -92,8 +92,8 @@ foreach ($theme in $themes) {
         $targetTree = Join-Path $trees "$($last.state).json"
         Move-Item $sourcePng $targetPng -Force
         Move-Item $sourceTree $targetTree -Force
-        $last.screenshot = [System.IO.Path]::GetRelativePath($output, $targetPng).Replace('\','/')
-        $last.uiaTree = [System.IO.Path]::GetRelativePath($output, $targetTree).Replace('\','/')
+        $last.screenshot = Get-AcceptanceRelativePath -BasePath $output -Path $targetPng -UseForwardSlash
+        $last.uiaTree = Get-AcceptanceRelativePath -BasePath $output -Path $targetTree -UseForwardSlash
     }
 }
 
@@ -113,6 +113,6 @@ $summary = [ordered]@{
     }
 }
 $summaryPath = Join-Path $output 'visual-matrix.json'
-$summary | ConvertTo-Json -Depth 10 | Set-Content $summaryPath -Encoding utf8NoBOM
+Write-AcceptanceUtf8File -Path $summaryPath -Content ($summary | ConvertTo-Json -Depth 10)
 if ($summary.status -eq 'Failed') { throw "VISUAL_MATRIX_GEOMETRY_FAILED|$summaryPath" }
 Write-Output "VISUAL_MATRIX_CAPTURED_REVIEW_REQUIRED|$summaryPath"

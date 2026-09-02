@@ -23,6 +23,64 @@ function Get-UiaRoot {
     [System.Windows.Automation.AutomationElement]::RootElement
 }
 
+function Write-AcceptanceUtf8File {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string] $Path,
+        [Parameter(Mandatory)] [AllowEmptyString()] [string] $Content
+    )
+    $directory = Split-Path -Parent $Path
+    if (-not [string]::IsNullOrWhiteSpace($directory)) {
+        New-Item -ItemType Directory -Path $directory -Force | Out-Null
+    }
+    $encoding = New-Object System.Text.UTF8Encoding -ArgumentList $false
+    [System.IO.File]::WriteAllText([System.IO.Path]::GetFullPath($Path), $Content, $encoding)
+}
+
+function Get-AcceptanceRelativePath {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [string] $BasePath,
+        [Parameter(Mandatory)] [string] $Path,
+        [switch] $UseForwardSlash
+    )
+    $baseFullPath = [System.IO.Path]::GetFullPath($BasePath)
+    $targetFullPath = [System.IO.Path]::GetFullPath($Path)
+    $trimCharacters = [char[]]@(
+        [System.IO.Path]::DirectorySeparatorChar,
+        [System.IO.Path]::AltDirectorySeparatorChar)
+    $baseWithoutSeparator = $baseFullPath.TrimEnd($trimCharacters)
+    if ($targetFullPath.TrimEnd($trimCharacters).Equals($baseWithoutSeparator, [StringComparison]::OrdinalIgnoreCase)) {
+        return '.'
+    }
+    $basePrefix = $baseWithoutSeparator + [System.IO.Path]::DirectorySeparatorChar
+    if (-not $targetFullPath.StartsWith($basePrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Path is outside the required base directory: '$targetFullPath' is not under '$baseFullPath'."
+    }
+    $relative = $targetFullPath.Substring($basePrefix.Length)
+    if ($UseForwardSlash) { return $relative.Replace('\', '/') }
+    $relative
+}
+
+function Get-AcceptanceFileSha256 {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [string] $Path)
+    (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToUpperInvariant()
+}
+
+function Get-AcceptanceStreamSha256 {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)] [System.IO.Stream] $Stream)
+    $algorithm = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = $algorithm.ComputeHash($Stream)
+        -join @($bytes | ForEach-Object { $_.ToString('X2') })
+    }
+    finally {
+        $algorithm.Dispose()
+    }
+}
+
 function Find-UiaWindow {
     [CmdletBinding()]
     param(
@@ -180,9 +238,8 @@ function Export-UiaTree {
     )
     $directory = Split-Path -Parent $Path
     New-Item -ItemType Directory -Path $directory -Force | Out-Null
-    Convert-UiaNode -Element $Root -Depth 0 -MaxDepth $MaxDepth |
-        ConvertTo-Json -Depth 30 |
-        Set-Content -LiteralPath $Path -Encoding utf8NoBOM
+    $json = Convert-UiaNode -Element $Root -Depth 0 -MaxDepth $MaxDepth | ConvertTo-Json -Depth 30
+    Write-AcceptanceUtf8File -Path $Path -Content $json
 }
 
 function Save-DesktopScreenshot {
@@ -219,4 +276,4 @@ function Wait-AcceptanceCondition {
     throw $FailureMessage
 }
 
-Export-ModuleMember -Function Find-UiaWindow, Get-UiaWindowFromHandle, Find-UiaElement, Invoke-UiaElement, Set-UiaValue, Set-UiaForeground, Send-UiaKeys, Export-UiaTree, Save-DesktopScreenshot, Wait-AcceptanceCondition
+Export-ModuleMember -Function Find-UiaWindow, Get-UiaWindowFromHandle, Find-UiaElement, Invoke-UiaElement, Set-UiaValue, Set-UiaForeground, Send-UiaKeys, Export-UiaTree, Save-DesktopScreenshot, Wait-AcceptanceCondition, Write-AcceptanceUtf8File, Get-AcceptanceRelativePath, Get-AcceptanceFileSha256, Get-AcceptanceStreamSha256

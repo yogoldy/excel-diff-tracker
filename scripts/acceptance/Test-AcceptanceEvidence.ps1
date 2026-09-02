@@ -7,9 +7,10 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSScriptRoot 'UiAutomation.psm1') -Force
 $root = (Resolve-Path $AcceptanceDirectory).Path
 $installer = (Resolve-Path $InstallerPath).Path
-$installerHash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToUpperInvariant()
+$installerHash = Get-AcceptanceFileSha256 -Path $installer
 
 function Test-ChecksumManifest {
     param([string] $RunDirectory)
@@ -23,7 +24,7 @@ function Test-ChecksumManifest {
         if (-not $seen.Add($relative)) { throw "Duplicate evidence checksum path: $relative" }
         $path = Join-Path $RunDirectory $relative
         if (-not (Test-Path $path -PathType Leaf)) { throw "Evidence file is missing: $path" }
-        $actual = (Get-FileHash $path -Algorithm SHA256).Hash
+        $actual = Get-AcceptanceFileSha256 -Path $path
         if ($actual -ne $Matches[1].ToUpperInvariant()) { throw "Evidence checksum mismatch: $path" }
     }
     $files = @(Get-ChildItem $RunDirectory -File -Recurse | Where-Object FullName -ne $manifestPath)
@@ -175,5 +176,5 @@ $approval = [ordered]@{
     attestations = $attestations
 }
 $approvalPath = Join-Path $root 'approval.json'
-$approval | ConvertTo-Json -Depth 8 | Set-Content $approvalPath -Encoding utf8NoBOM
+Write-AcceptanceUtf8File -Path $approvalPath -Content ($approval | ConvertTo-Json -Depth 8)
 Write-Output "ACCEPTANCE_EVIDENCE_APPROVED|$approvalPath|$installerHash"

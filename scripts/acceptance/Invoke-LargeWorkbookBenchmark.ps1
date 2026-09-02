@@ -107,7 +107,7 @@ function Assert-Gate {
 
 function Get-RelativeEvidencePath {
     param([Parameter(Mandatory)] [string] $Path)
-    [System.IO.Path]::GetRelativePath($evidence, $Path).Replace('\', '/')
+    Get-AcceptanceRelativePath -BasePath $evidence -Path $Path -UseForwardSlash
 }
 
 function Choose-FileFromDialog {
@@ -303,7 +303,7 @@ function Invoke-CapturePhase {
     Assert-Gate -Name "$Name has no sheet changes" -Condition ([long]$probeResult.latestVersion.sheetChangeCount -eq 0) -EvidencePath ("probe/sequence-{0:D6}.json" -f $Sequence) -Detail "actual=$($probeResult.latestVersion.sheetChangeCount)"
     Assert-Gate -Name "$Name delta is on Performance!$EvidenceAddress" -Condition ($probeResult.cellChange.sheetName -eq 'Performance' -and $probeResult.cellChange.address -eq $EvidenceAddress) -EvidencePath ("probe/sequence-{0:D6}.json" -f $Sequence) -Detail "$($probeResult.cellChange.sheetName)!$($probeResult.cellChange.address)"
 
-    $fileHash = (Get-FileHash $fixture -Algorithm SHA256).Hash.ToUpperInvariant()
+    $fileHash = Get-AcceptanceFileSha256 -Path $fixture
     Assert-Gate -Name "$Name captured hash matches the saved workbook" -Condition ($probeResult.currentHash.ToUpperInvariant() -eq $fileHash -and $probeResult.latestVersion.sha256.ToUpperInvariant() -eq $fileHash) -EvidencePath ("probe/sequence-{0:D6}.json" -f $Sequence) -Detail $fileHash
     $automaticReport = Copy-AndVerifyAutomaticReport -ProbeResult $probeResult -Sequence $Sequence -Address $EvidenceAddress -ExpectedValue $Value -ExpectedCellChanges $ExpectedCellChanges -ExpectedHeadingCount $ExpectedAutomaticHeadings -RequireTruncation:$RequireTruncation
     $uiEvidence = Test-HistoryUi -Sequence $Sequence -Summary "$($ExpectedCellChanges.ToString('N0')) cells, 0 sheet changes" -EvidenceName ("history-sequence-{0:D6}" -f $Sequence)
@@ -381,8 +381,8 @@ function Export-LatestVersionThroughUi {
 }
 
 try {
-    $installerHash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToUpperInvariant()
-    $applicationHash = (Get-FileHash $application -Algorithm SHA256).Hash.ToUpperInvariant()
+    $installerHash = Get-AcceptanceFileSha256 -Path $installer
+    $applicationHash = Get-AcceptanceFileSha256 -Path $application
     Assert-Gate -Name 'benchmark uses the frozen installer' -Condition ($installerHash -eq $ExpectedInstallerSha256.ToUpperInvariant()) -EvidencePath '' -Detail $installerHash
     Assert-Gate -Name 'benchmark uses the frozen installed executable' -Condition ($applicationHash -eq $ExpectedApplicationSha256.ToUpperInvariant()) -EvidencePath '' -Detail $applicationHash
     Assert-Gate -Name 'installed app database exists' -Condition (Test-Path $database -PathType Leaf) -EvidencePath '' -Detail $database
@@ -393,7 +393,7 @@ try {
     $generationElapsedMilliseconds = [math]::Round($generationStopwatch.Elapsed.TotalMilliseconds, 3)
     [System.IO.File]::WriteAllText((Join-Path $logDirectory 'large-fixture-generation.txt'), $generatorOutput, [System.Text.UTF8Encoding]::new($false))
     Assert-Gate -Name 'fixture generator reports exactly 500,000 cells' -Condition ($generatorOutput -match 'LARGE_FIXTURE_CREATED\|rows=25000\|columns=20\|cells=500000\|') -EvidencePath 'logs/large-fixture-generation.txt' -Detail $generatorOutput.Trim()
-    $initialFixtureSha256 = (Get-FileHash $fixture -Algorithm SHA256).Hash.ToUpperInvariant()
+    $initialFixtureSha256 = Get-AcceptanceFileSha256 -Path $fixture
     $initialFixtureBytes = (Get-Item $fixture).Length
 
     Start-Process $application | Out-Null
@@ -594,8 +594,8 @@ finally {
     Add-GateAssertion -Name 'peak private working set stays below 1.5 GiB' -Passed ($null -ne $peakPrivateWorkingSetBytes -and [long]$peakPrivateWorkingSetBytes -lt $maxPrivateBytes) -EvidencePath 'telemetry/large-workbook-telemetry.jsonl' -Detail "peak=$peakPrivateWorkingSetBytes threshold=$maxPrivateBytes"
     Add-GateAssertion -Name 'peak total working set stays below 1.5 GiB' -Passed ([long]$peakWorkingSetBytes -lt $maxPrivateBytes) -EvidencePath 'telemetry/large-workbook-telemetry.jsonl' -Detail "peak=$peakWorkingSetBytes threshold=$maxPrivateBytes"
 
-    $installerHashForResult = if (Test-Path $installer -PathType Leaf) { (Get-FileHash $installer -Algorithm SHA256).Hash.ToUpperInvariant() } else { $null }
-    $applicationHashForResult = if (Test-Path $application -PathType Leaf) { (Get-FileHash $application -Algorithm SHA256).Hash.ToUpperInvariant() } else { $null }
+    $installerHashForResult = if (Test-Path $installer -PathType Leaf) { Get-AcceptanceFileSha256 -Path $installer } else { $null }
+    $applicationHashForResult = if (Test-Path $application -PathType Leaf) { Get-AcceptanceFileSha256 -Path $application } else { $null }
     $status = if (-not $failed -and @($assertions | Where-Object { -not $_.passed }).Count -eq 0 -and $phases.Count -eq 5) { 'Passed' } else { 'Failed' }
     $result = [ordered]@{
         schemaVersion = 1
@@ -656,7 +656,7 @@ finally {
         assertions = $assertions
         failure = $failureMessage
     }
-    $result | ConvertTo-Json -Depth 15 | Set-Content $resultPath -Encoding utf8NoBOM
+    Write-AcceptanceUtf8File -Path $resultPath -Content ($result | ConvertTo-Json -Depth 15)
 }
 
 if ($failed -or @($assertions | Where-Object { -not $_.passed }).Count -ne 0) {

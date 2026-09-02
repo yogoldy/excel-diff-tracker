@@ -307,7 +307,7 @@ function Invoke-LockedRecoveryGate {
         }
 
         $changedBytes = [System.IO.File]::ReadAllBytes($recoveryChanged)
-        $result.hashes.candidate = (Get-FileHash $recoveryChanged -Algorithm SHA256).Hash
+        $result.hashes.candidate = Get-AcceptanceFileSha256 -Path $recoveryChanged
         $lockStream = [System.IO.FileStream]::new(
             $recovery,
             [System.IO.FileMode]::Open,
@@ -367,7 +367,7 @@ function Invoke-LockedRecoveryGate {
         $result.timing.lockReleasedUtc = $lockReleased.ToString('O')
         $result.timing.lockedDurationSeconds = ($lockReleased - $lockAcquired).TotalSeconds
         $result.checks.lockHeldBeyond60Seconds = $result.timing.lockedDurationSeconds -ge 60
-        $result.hashes.sourceAfterRelease = (Get-FileHash $recovery -Algorithm SHA256).Hash
+        $result.hashes.sourceAfterRelease = Get-AcceptanceFileSha256 -Path $recovery
         $result.checks.lockedBytesMatchChangedCandidate = $result.hashes.sourceAfterRelease -eq $result.hashes.candidate
 
         $recoveredPath = Join-Path $recoveryResults 'recovered.json'
@@ -399,7 +399,7 @@ function Invoke-LockedRecoveryGate {
             [string]::IsNullOrWhiteSpace($recovered.lastError) -and
             $recovered.errorCount -eq 1
 
-        $result.hashes.sourceAfterRecovery = (Get-FileHash $recovery -Algorithm SHA256).Hash
+        $result.hashes.sourceAfterRecovery = Get-AcceptanceFileSha256 -Path $recovery
         Start-Sleep -Seconds 12
         $settledPath = Join-Path $recoveryResults 'settled.json'
         $settled = Wait-ProbeResult -ProbeArguments @(
@@ -435,7 +435,7 @@ function Invoke-LockedRecoveryGate {
         if ($lockStream) {
             try { $lockStream.Dispose() } catch { }
         }
-        $result | ConvertTo-Json -Depth 12 | Set-Content $resultPath -Encoding utf8NoBOM
+        Write-AcceptanceUtf8File -Path $resultPath -Content ($result | ConvertTo-Json -Depth 12)
     }
 }
 
@@ -448,8 +448,7 @@ function Get-ZipEntrySha256 {
         if (-not $entry) { throw "Archive entry not found: $EntryName" }
         $stream = $entry.Open()
         try {
-            $hash = [System.Security.Cryptography.SHA256]::HashData($stream)
-            [Convert]::ToHexString($hash)
+            Get-AcceptanceStreamSha256 -Stream $stream
         }
         finally { $stream.Dispose() }
     }
@@ -471,15 +470,15 @@ function Write-EnvironmentManifest {
         dotnetOnPath = [bool](Get-Command dotnet -ErrorAction SilentlyContinue)
         excelPath = $excelPath
         installerPath = $installer
-        installerSha256 = (Get-FileHash $installer -Algorithm SHA256).Hash
+        installerSha256 = Get-AcceptanceFileSha256 -Path $installer
         sourceCommit = (& git -C $repositoryRoot rev-parse HEAD 2>$null)
     }
-    $manifest | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $evidence 'environment.json') -Encoding utf8NoBOM
+    Write-AcceptanceUtf8File -Path (Join-Path $evidence 'environment.json') -Content ($manifest | ConvertTo-Json -Depth 8)
 }
 
 try {
     Write-EnvironmentManifest
-    $installerHash = (Get-FileHash $installer -Algorithm SHA256).Hash
+    $installerHash = Get-AcceptanceFileSha256 -Path $installer
     if ($ExpectedInstallerSha256 -and $installerHash -ne $ExpectedInstallerSha256.ToUpperInvariant()) {
         throw "Installer SHA-256 $installerHash does not match expected $ExpectedInstallerSha256."
     }
@@ -589,7 +588,7 @@ try {
     } 'probe/Acceptance Macro.xlsm-sequence-3.json'
     $macroHashAfter = Get-ZipEntrySha256 $xlsm 'xl/vbaProject.bin'
     Add-Assertion 'xlsm VBA part unchanged' ($macroHashBefore -eq $macroHashAfter) 'macro-hashes.json' "$macroHashBefore -> $macroHashAfter"
-    @{ before = $macroHashBefore; after = $macroHashAfter } | ConvertTo-Json | Set-Content (Join-Path $evidence 'macro-hashes.json') -Encoding utf8NoBOM
+    Write-AcceptanceUtf8File -Path (Join-Path $evidence 'macro-hashes.json') -Content (@{ before = $macroHashBefore; after = $macroHashAfter } | ConvertTo-Json)
 
     Click-ProductControl 'Excel Diff Tracker' 'HistoryNavigationButton'
     $main = Get-ProductWindow 'Excel Diff Tracker'
@@ -622,11 +621,11 @@ finally {
     }
 
     try {
-        Get-WinEvent -FilterHashtable @{ LogName = 'Application'; StartTime = $runStartedUtc } -ErrorAction Stop |
+        $windowsErrors = Get-WinEvent -FilterHashtable @{ LogName = 'Application'; StartTime = $runStartedUtc } -ErrorAction Stop |
             Where-Object ProviderName -in @('Application Error', '.NET Runtime', 'Windows Error Reporting') |
-            Select-Object TimeCreated, ProviderName, Id, LevelDisplayName, Message |
-            ConvertTo-Json -Depth 5 |
-            Set-Content (Join-Path $logs 'windows-errors.json') -Encoding utf8NoBOM
+            Select-Object TimeCreated, ProviderName, Id, LevelDisplayName, Message
+        $windowsErrorsJson = ConvertTo-Json -InputObject @($windowsErrors) -Depth 5
+        Write-AcceptanceUtf8File -Path (Join-Path $logs 'windows-errors.json') -Content $windowsErrorsJson
     } catch { }
 
     if (-not $KeepInstalled -and (Test-Path (Join-Path $installDirectory 'unins000.exe'))) {
@@ -641,10 +640,10 @@ finally {
         runNumber = $RunNumber
         startedUtc = $runStartedUtc.ToString('O')
         finishedUtc = [DateTime]::UtcNow.ToString('O')
-        installerSha256 = (Get-FileHash $installer -Algorithm SHA256).Hash
+        installerSha256 = Get-AcceptanceFileSha256 -Path $installer
         assertions = $assertions
     }
-    $summary | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $evidence 'acceptance.json') -Encoding utf8NoBOM
+    Write-AcceptanceUtf8File -Path (Join-Path $evidence 'acceptance.json') -Content ($summary | ConvertTo-Json -Depth 10)
 
     try { Stop-Transcript | Out-Null } catch { }
 
@@ -653,10 +652,10 @@ finally {
         Where-Object FullName -ne $checksumPath |
         Sort-Object FullName |
         ForEach-Object {
-            $relative = [System.IO.Path]::GetRelativePath($evidence, $_.FullName).Replace('\', '/')
-            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant())  $relative"
+            $relative = Get-AcceptanceRelativePath -BasePath $evidence -Path $_.FullName -UseForwardSlash
+            "$((Get-AcceptanceFileSha256 -Path $_.FullName).ToLowerInvariant())  $relative"
     }
-    [System.IO.File]::WriteAllLines($checksumPath, $checksumLines, [System.Text.UTF8Encoding]::new($false))
+    Write-AcceptanceUtf8File -Path $checksumPath -Content (($checksumLines -join [Environment]::NewLine) + [Environment]::NewLine)
 }
 
 if ($failed -or @($assertions | Where-Object { -not $_.passed }).Count -ne 0) {

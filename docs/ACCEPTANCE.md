@@ -10,6 +10,7 @@ Excel Diff Tracker is approved for release only when the exact installer candida
 - A skipped, missing, flaky, or inconclusive mandatory assertion is a failure.
 - The installed `ExcelDiffTracker.exe` and its public UI are the system under test. Product assemblies and `ExcelDiffTracker.Smoke.exe` are not valid black-box substitutes.
 - Primary Excel save acceptance uses visible Excel, keyboard entry, and `Ctrl+S`. COM may create fixtures, disable macros, and open Excel, but it may not perform the acceptance edit or save.
+- The acceptance harness must run under stock Windows PowerShell 5.1 on the clean VM; PowerShell 7 is not a prerequisite.
 
 ## Mandatory gates
 
