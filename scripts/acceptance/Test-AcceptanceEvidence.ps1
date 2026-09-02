@@ -32,12 +32,97 @@ function Test-ChecksumManifest {
     }
 }
 
+function Test-RecoveryEvidence {
+    param([string] $RunDirectory)
+    $path = Join-Path $RunDirectory 'recovery\recovery.json'
+    if (-not (Test-Path $path -PathType Leaf)) {
+        throw "Mandatory exclusive-lock recovery evidence is missing: $path"
+    }
+    $recovery = Get-Content $path -Raw | ConvertFrom-Json
+    if ($recovery.scenarioId -ne 'held-open-exclusive-lock-over-60s') {
+        throw "Unexpected recovery scenario identity: $path"
+    }
+    if ($recovery.status -ne 'Passed') {
+        throw "Exclusive-lock recovery gate did not pass: $path"
+    }
+    foreach ($phase in @('baseline', 'warning', 'recovered', 'settled')) {
+        $phaseProperty = $recovery.PSObject.Properties[$phase]
+        $probeResult = if ($null -eq $phaseProperty) { $null } else { $phaseProperty.Value }
+        if ($null -eq $probeResult -or $probeResult.passed -ne $true -or @($probeResult.failures).Count -ne 0) {
+            throw "Exclusive-lock recovery probe phase did not pass ($phase): $path"
+        }
+    }
+
+    $requiredChecks = @(
+        'baselineAtSequenceZero',
+        'lockHeldBeyond60Seconds',
+        'warningRecordedExactlyOnce',
+        'baselinePreservedDuringWarning',
+        'actionableWarningRenderedExactlyOnce',
+        'lockedBytesMatchChangedCandidate',
+        'recoveredWithin20Seconds',
+        'exactDeltaCaptured',
+        'returnedToActive',
+        'noDuplicateAfterReconciliation',
+        'noFileMutationAfterRelease'
+    )
+    foreach ($name in $requiredChecks) {
+        $property = $recovery.checks.PSObject.Properties[$name]
+        if ($null -eq $property -or $property.Value -ne $true) {
+            throw "Exclusive-lock recovery check is missing or failed ($name): $path"
+        }
+    }
+
+    if ([double]$recovery.timing.lockedDurationSeconds -lt 60) {
+        throw "Exclusive lock was not held beyond the product timeout: $path"
+    }
+    if ([double]$recovery.timing.recoverySeconds -lt 0 -or [double]$recovery.timing.recoverySeconds -gt 20) {
+        throw "Automatic recovery did not complete within 20 seconds: $path"
+    }
+    if ([long]$recovery.baseline.currentSequence -ne 0 -or [long]$recovery.warning.currentSequence -ne 0) {
+        throw "The baseline advanced before the exclusive lock was released: $path"
+    }
+    if ($recovery.baseline.currentHash -ne $recovery.warning.currentHash) {
+        throw "The baseline hash changed while the workbook was exclusively locked: $path"
+    }
+    if ([long]$recovery.recovered.currentSequence -ne 1 -or [long]$recovery.settled.currentSequence -ne 1) {
+        throw "Recovery was missed or duplicated: $path"
+    }
+    if ([long]$recovery.recovered.latestVersion.cellChangeCount -ne 1 -or
+        [long]$recovery.recovered.latestVersion.sheetChangeCount -ne 0 -or
+        $recovery.recovered.cellChange.address -ne $recovery.address -or
+        $recovery.recovered.cellChange.kinds.Split(',') -notcontains 'LiteralAdded') {
+        throw "Recovery did not capture the one exact expected cell delta: $path"
+    }
+    $recoveredAfter = $recovery.recovered.cellChange.afterJson | ConvertFrom-Json
+    if ($recoveredAfter.literalValue -ne $recovery.expectedValue) {
+        throw "Recovery captured the wrong literal value: $path"
+    }
+    if ($recovery.recovered.workbookStatus -ne 'Active' -or
+        -not [string]::IsNullOrWhiteSpace($recovery.recovered.lastError) -or
+        $recovery.recovered.latestVersion.reportStatus -ne 'Ready') {
+        throw "Workbook did not return to Active with its current error cleared: $path"
+    }
+    if ([long]$recovery.warning.errorCount -ne 1 -or [long]$recovery.recovered.errorCount -ne 1 -or [long]$recovery.settled.errorCount -ne 1) {
+        throw "The exclusive lock did not produce exactly one retained warning record: $path"
+    }
+    if ([long]$recovery.warningUi.categoryCount -ne 1 -or [long]$recovery.warningUi.messageCount -lt 1 -or [long]$recovery.warningUi.workbookPathCount -lt 1) {
+        throw "The actionable recovery warning was not rendered exactly once: $path"
+    }
+    if ($recovery.hashes.candidate -ne $recovery.hashes.sourceAfterRelease -or
+        $recovery.hashes.sourceAfterRelease -ne $recovery.hashes.sourceAfterRecovery -or
+        $recovery.hashes.sourceAfterRecovery -ne $recovery.settled.currentHash) {
+        throw "Recovery evidence does not prove unchanged source bytes after lock release: $path"
+    }
+}
+
 $runs = @(Get-ChildItem $root -Directory -Recurse | Where-Object { Test-Path (Join-Path $_.FullName 'acceptance.json') })
 if ($runs.Count -ne $RequiredRunCount) {
     throw "Expected exactly $RequiredRunCount black-box acceptance runs, found $($runs.Count)."
 }
 $runSummaries = foreach ($run in $runs | Sort-Object Name) {
     Test-ChecksumManifest $run.FullName
+    Test-RecoveryEvidence $run.FullName
     $summary = Get-Content (Join-Path $run.FullName 'acceptance.json') -Raw | ConvertFrom-Json
     if ($summary.status -ne 'Passed') { throw "Acceptance run is not Passed: $($run.FullName)" }
     if ($summary.installerSha256.ToUpperInvariant() -ne $installerHash) {

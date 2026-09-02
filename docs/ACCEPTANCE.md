@@ -44,6 +44,8 @@ For both formats, add the fixture through the installed UI while it is already o
 - Make the report folder temporarily unwritable and interrupt a large capture. Restore/restart and require pending-report recovery, no duplicate, and preservation of the last valid baseline.
 - Corrupt and encrypted workbooks must never advance the baseline.
 
+Every clean critical-path run must execute the automated exclusive-lock recovery gate. The gate writes a valid changed workbook while its tracked path is held with `FileShare.None`, retains that lock until the installed product records its 60-second warning, proves the sequence and baseline hash did not advance, renders the actionable warning in History, then releases the handle without another save. Recovery must capture the one exact delta and return to Active within 20 seconds; a reconciliation settle check must still show sequence 1 with unchanged source bytes and no duplicate warning or version. `recovery/recovery.json` and its raw probe outputs are mandatory, checksummed run evidence.
+
 ### 500,000-cell product benchmark
 
 This is an installed-product test, not direct extraction. Add a seeded 500,000-populated-cell fixture through the UI, open it in visible Excel, and make three saves touching cells near the beginning, middle, and end.

@@ -37,7 +37,8 @@ $uia = Join-Path $evidence 'uia'
 $logs = Join-Path $evidence 'logs'
 $fixtures = Join-Path $evidence 'fixtures'
 $probeResults = Join-Path $evidence 'probe'
-New-Item -ItemType Directory -Path $evidence, $screenshots, $uia, $logs, $fixtures, $probeResults -Force | Out-Null
+$recoveryResults = Join-Path $evidence 'recovery'
+New-Item -ItemType Directory -Path $evidence, $screenshots, $uia, $logs, $fixtures, $probeResults, $recoveryResults -Force | Out-Null
 Start-Transcript -Path (Join-Path $logs 'acceptance-transcript.txt') -Force | Out-Null
 
 $assertions = [System.Collections.Generic.List[object]]::new()
@@ -54,10 +55,14 @@ $startMenuShortcut = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Progra
 $reportDirectory = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Excel Diff Tracker Reports'
 $xlsx = Join-Path $fixtures 'Acceptance.xlsx'
 $xlsm = Join-Path $fixtures 'Acceptance Macro.xlsm'
+$recovery = Join-Path $fixtures 'Recovery Lock.xlsx'
+$recoveryChanged = Join-Path $fixtures 'Recovery Lock Changed.xlsx'
 $xlsxCell = 'Z1000'
 $xlsmCell = 'Z1000'
+$recoveryCell = 'Y999'
 Copy-Item $sourceXlsx $xlsx -Force
 Copy-Item $sourceXlsm $xlsm -Force
+Copy-Item $sourceXlsx $recovery -Force
 
 function Add-Assertion {
     param([string] $Name, [bool] $Passed, [string] $EvidencePath, [string] $Detail)
@@ -182,6 +187,258 @@ function Invoke-Probe {
     throw "Acceptance probe did not pass within $TimeoutSeconds seconds. See $outputPath"
 }
 
+function Wait-ProbeResult {
+    param(
+        [Parameter(Mandatory)] [string[]] $ProbeArguments,
+        [Parameter(Mandatory)] [string] $OutputPath,
+        [int] $TimeoutSeconds = 20
+    )
+    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    $lastOutput = ''
+    do {
+        $lastOutput = & $probe @ProbeArguments 2>&1 | Out-String
+        $exitCode = $LASTEXITCODE
+        if ($exitCode -eq 0) {
+            [System.IO.File]::WriteAllText($OutputPath, $lastOutput, [System.Text.UTF8Encoding]::new($false))
+            return ($lastOutput | ConvertFrom-Json)
+        }
+        Start-Sleep -Milliseconds 200
+    } while ([DateTime]::UtcNow -lt $deadline)
+    [System.IO.File]::WriteAllText($OutputPath, $lastOutput, [System.Text.UTF8Encoding]::new($false))
+    throw "Acceptance probe did not pass within $TimeoutSeconds seconds. See $OutputPath"
+}
+
+function Prepare-RecoveryFixtures {
+    $baselineWorkbook = $null
+    $changedWorkbook = $null
+    try {
+        $baselineWorkbook = $excel.Workbooks.Open($recovery)
+        $baselineWorkbook.Worksheets.Item(1).Range($recoveryCell).ClearContents()
+        $baselineWorkbook.Save()
+        $baselineWorkbook.Close($false)
+        [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($baselineWorkbook)
+        $baselineWorkbook = $null
+
+        Copy-Item $recovery $recoveryChanged -Force
+        $changedWorkbook = $excel.Workbooks.Open($recoveryChanged)
+        $changedWorkbook.Worksheets.Item(1).Range($recoveryCell).Value2 = 'locked-recovery'
+        $changedWorkbook.Save()
+        $changedWorkbook.Close($false)
+        [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($changedWorkbook)
+        $changedWorkbook = $null
+    }
+    finally {
+        if ($changedWorkbook) {
+            try { $changedWorkbook.Close($false) } catch { }
+            try { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($changedWorkbook) } catch { }
+        }
+        if ($baselineWorkbook) {
+            try { $baselineWorkbook.Close($false) } catch { }
+            try { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($baselineWorkbook) } catch { }
+        }
+    }
+}
+
+function Invoke-LockedRecoveryGate {
+    $resultPath = Join-Path $recoveryResults 'recovery.json'
+    $lockStream = $null
+    $result = [ordered]@{
+        scenarioId = 'held-open-exclusive-lock-over-60s'
+        status = 'Failed'
+        workbook = $recovery
+        changedCandidate = $recoveryChanged
+        address = $recoveryCell
+        expectedValue = 'locked-recovery'
+        baseline = $null
+        warning = $null
+        recovered = $null
+        settled = $null
+        hashes = [ordered]@{
+            candidate = $null
+            sourceAfterRelease = $null
+            sourceAfterRecovery = $null
+        }
+        timing = [ordered]@{
+            lockAcquiredUtc = $null
+            lockedWriteCompletedUtc = $null
+            warningObservedUtc = $null
+            lockReleasedUtc = $null
+            recoveredUtc = $null
+            lockedDurationSeconds = $null
+            recoverySeconds = $null
+        }
+        warningUi = [ordered]@{
+            categoryCount = 0
+            messageCount = 0
+            workbookPathCount = 0
+        }
+        checks = [ordered]@{
+            baselineAtSequenceZero = $false
+            lockHeldBeyond60Seconds = $false
+            warningRecordedExactlyOnce = $false
+            baselinePreservedDuringWarning = $false
+            actionableWarningRenderedExactlyOnce = $false
+            lockedBytesMatchChangedCandidate = $false
+            recoveredWithin20Seconds = $false
+            exactDeltaCaptured = $false
+            returnedToActive = $false
+            noDuplicateAfterReconciliation = $false
+            noFileMutationAfterRelease = $false
+        }
+        failure = $null
+    }
+
+    try {
+        Set-UiaForeground -Window $main
+        Click-ProductControl 'Excel Diff Tracker' 'DashboardAddWorkbookButton'
+        Choose-FileFromDialog 'Choose a workbook to track' $recovery
+        $baselinePath = Join-Path $recoveryResults 'baseline.json'
+        $baseline = Wait-ProbeResult -ProbeArguments @(
+            '--database', $databasePath,
+            '--workbook', $recovery,
+            '--expected-sequence', '0',
+            '--require-active',
+            '--require-no-errors',
+            '--require-no-last-error') -OutputPath $baselinePath -TimeoutSeconds 60
+        $result.baseline = $baseline
+        $result.checks.baselineAtSequenceZero = $baseline.passed -and $baseline.currentSequence -eq 0 -and $baseline.errorCount -eq 0
+        if (-not $result.checks.baselineAtSequenceZero) {
+            throw 'Recovery fixture did not establish a clean sequence-zero baseline.'
+        }
+
+        $changedBytes = [System.IO.File]::ReadAllBytes($recoveryChanged)
+        $result.hashes.candidate = (Get-FileHash $recoveryChanged -Algorithm SHA256).Hash
+        $lockStream = [System.IO.FileStream]::new(
+            $recovery,
+            [System.IO.FileMode]::Open,
+            [System.IO.FileAccess]::ReadWrite,
+            [System.IO.FileShare]::None)
+        $lockAcquired = [DateTime]::UtcNow
+        $result.timing.lockAcquiredUtc = $lockAcquired.ToString('O')
+        $lockStream.SetLength(0)
+        $lockStream.Write($changedBytes, 0, $changedBytes.Length)
+        $lockStream.Flush($true)
+        $lockedWriteCompleted = [DateTime]::UtcNow
+        $result.timing.lockedWriteCompletedUtc = $lockedWriteCompleted.ToString('O')
+
+        $warningPath = Join-Path $recoveryResults 'warning.json'
+        $warning = Wait-ProbeResult -ProbeArguments @(
+            '--database', $databasePath,
+            '--workbook', $recovery,
+            '--expected-sequence', '0',
+            '--minimum-errors', '1') -OutputPath $warningPath -TimeoutSeconds 80
+        $warningObserved = [DateTime]::UtcNow
+        $result.warning = $warning
+        $result.timing.warningObservedUtc = $warningObserved.ToString('O')
+        $result.checks.warningRecordedExactlyOnce = $warning.errorCount -eq 1
+        $result.checks.baselinePreservedDuringWarning =
+            $warning.currentSequence -eq 0 -and
+            $warning.currentHash -eq $baseline.currentHash
+
+        Click-ProductControl 'Excel Diff Tracker' 'HistoryNavigationButton'
+        $main = Get-ProductWindow 'Excel Diff Tracker'
+        Wait-AcceptanceCondition -TimeoutSeconds 5 -FailureMessage 'The recovery warning was recorded but did not render in History.' -Condition {
+            $nodes = $main.FindAll(
+                [System.Windows.Automation.TreeScope]::Descendants,
+                [System.Windows.Automation.Condition]::TrueCondition)
+            @($nodes | Where-Object { $_.Current.Name -like '*Workbook temporarily unavailable*Waiting for a stable save*' }).Count -eq 1
+        }
+        Save-UiState 'locked-recovery-warning' $main
+        $warningNodes = $main.FindAll(
+            [System.Windows.Automation.TreeScope]::Descendants,
+            [System.Windows.Automation.Condition]::TrueCondition)
+        $result.warningUi.categoryCount = @($warningNodes | Where-Object {
+            $_.Current.Name -like '*Workbook temporarily unavailable*Waiting for a stable save*'
+        }).Count
+        $result.warningUi.messageCount = @($warningNodes | Where-Object {
+            $_.Current.Name -like '*did not become readable and stable within 60 seconds*'
+        }).Count
+        $result.warningUi.workbookPathCount = @($warningNodes | Where-Object {
+            $_.Current.Name -eq $recovery
+        }).Count
+        $result.checks.actionableWarningRenderedExactlyOnce =
+            $result.warningUi.categoryCount -eq 1 -and
+            $result.warningUi.messageCount -ge 1 -and
+            $result.warningUi.workbookPathCount -ge 1
+
+        $lockStream.Dispose()
+        $lockStream = $null
+        $lockReleased = [DateTime]::UtcNow
+        $result.timing.lockReleasedUtc = $lockReleased.ToString('O')
+        $result.timing.lockedDurationSeconds = ($lockReleased - $lockAcquired).TotalSeconds
+        $result.checks.lockHeldBeyond60Seconds = $result.timing.lockedDurationSeconds -ge 60
+        $result.hashes.sourceAfterRelease = (Get-FileHash $recovery -Algorithm SHA256).Hash
+        $result.checks.lockedBytesMatchChangedCandidate = $result.hashes.sourceAfterRelease -eq $result.hashes.candidate
+
+        $recoveredPath = Join-Path $recoveryResults 'recovered.json'
+        $recovered = Wait-ProbeResult -ProbeArguments @(
+            '--database', $databasePath,
+            '--workbook', $recovery,
+            '--expected-sequence', '1',
+            '--address', $recoveryCell,
+            '--expected-value', 'locked-recovery',
+            '--expected-kind', 'LiteralAdded',
+            '--report-contains', $recoveryCell,
+            '--require-active',
+            '--require-no-last-error',
+            '--require-ready-report',
+            '--minimum-errors', '1') -OutputPath $recoveredPath -TimeoutSeconds 20
+        $recoveredUtc = [DateTime]::UtcNow
+        $result.recovered = $recovered
+        $result.timing.recoveredUtc = $recoveredUtc.ToString('O')
+        $result.timing.recoverySeconds = ($recoveredUtc - $lockReleased).TotalSeconds
+        $result.checks.recoveredWithin20Seconds = $result.timing.recoverySeconds -le 20
+        $result.checks.exactDeltaCaptured =
+            $recovered.currentSequence -eq 1 -and
+            $recovered.latestVersion.cellChangeCount -eq 1 -and
+            $recovered.latestVersion.sheetChangeCount -eq 0 -and
+            $recovered.cellChange.address -eq $recoveryCell -and
+            $recovered.cellChange.kinds.Split(',') -contains 'LiteralAdded'
+        $result.checks.returnedToActive =
+            $recovered.workbookStatus -eq 'Active' -and
+            [string]::IsNullOrWhiteSpace($recovered.lastError) -and
+            $recovered.errorCount -eq 1
+
+        $result.hashes.sourceAfterRecovery = (Get-FileHash $recovery -Algorithm SHA256).Hash
+        Start-Sleep -Seconds 12
+        $settledPath = Join-Path $recoveryResults 'settled.json'
+        $settled = Wait-ProbeResult -ProbeArguments @(
+            '--database', $databasePath,
+            '--workbook', $recovery,
+            '--expected-sequence', '1',
+            '--require-active',
+            '--require-no-last-error',
+            '--require-ready-report',
+            '--minimum-errors', '1') -OutputPath $settledPath -TimeoutSeconds 5
+        $result.settled = $settled
+        $result.checks.noDuplicateAfterReconciliation =
+            $settled.currentSequence -eq 1 -and
+            $settled.currentHash -eq $recovered.currentHash -and
+            $settled.errorCount -eq 1
+        $result.checks.noFileMutationAfterRelease =
+            $result.hashes.sourceAfterRelease -eq $result.hashes.sourceAfterRecovery -and
+            $result.hashes.sourceAfterRecovery -eq $settled.currentHash
+
+        $failedChecks = @($result.checks.GetEnumerator() | Where-Object { -not $_.Value })
+        if ($failedChecks.Count -ne 0) {
+            throw "Locked recovery checks failed: $($failedChecks.Key -join ', ')"
+        }
+        $result.status = 'Passed'
+        Click-ProductControl 'Excel Diff Tracker' 'DashboardNavigationButton'
+    }
+    catch {
+        $result.status = 'Failed'
+        $result.failure = $_.Exception.ToString()
+        throw
+    }
+    finally {
+        if ($lockStream) {
+            try { $lockStream.Dispose() } catch { }
+        }
+        $result | ConvertTo-Json -Depth 12 | Set-Content $resultPath -Encoding utf8NoBOM
+    }
+}
+
 function Get-ZipEntrySha256 {
     param([string] $Path, [string] $EntryName)
     Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -246,6 +503,7 @@ try {
     $xlsxWorkbook = $excel.Workbooks.Open($xlsx)
     $xlsxWorkbook.Worksheets.Item(1).Range($xlsxCell).ClearContents()
     $xlsxWorkbook.Save()
+    Prepare-RecoveryFixtures
 
     $appProcess = Start-Process $application -PassThru
     $onboarding = Get-ProductWindow 'Welcome to Excel Diff Tracker'
@@ -285,6 +543,10 @@ try {
     $main = Get-ProductWindow 'Excel Diff Tracker'
     Save-UiState 'dashboard-baseline' $main
     Add-Assertion 'all onboarding steps completed' $true 'screenshots/onboarding-step-5.png' 'Reached installed dashboard.'
+
+    Invoke-Step 'exclusive-lock timeout recovers without another save' {
+        Invoke-LockedRecoveryGate
+    } 'recovery/recovery.json'
 
     Invoke-Step 'xlsx save 1 while Excel remains open' {
         Save-ExcelLiteral -Address $xlsxCell -Value 'test'
