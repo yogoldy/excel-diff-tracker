@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory)] [string] $ResultPath,
     [Parameter(Mandatory)] [string] $InstallerPath,
     [Parameter(Mandatory)] [ValidatePattern('^[A-Fa-f0-9]{64}$')] [string] $ExpectedApplicationSha256,
-    [Parameter(Mandatory)] [string] $ProbePath
+    [Parameter(Mandatory)] [string] $ProbePath,
+    [Parameter(Mandatory)] [string] $XlsmFixture
 )
 
 Set-StrictMode -Version Latest
@@ -13,6 +14,8 @@ $path = (Resolve-Path $ResultPath).Path
 $root = Split-Path -Parent $path
 $installer = (Resolve-Path $InstallerPath).Path
 $probe = (Resolve-Path $ProbePath).Path
+$sourceXlsm = (Resolve-Path $XlsmFixture).Path
+if ([System.IO.Path]::GetExtension($sourceXlsm) -ne '.xlsm') { throw 'XlsmFixture must use the .xlsm extension.' }
 $installerHash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToUpperInvariant()
 $applicationHash = $ExpectedApplicationSha256.ToUpperInvariant()
 $probeHash = (Get-FileHash $probe -Algorithm SHA256).Hash.ToUpperInvariant()
@@ -38,6 +41,24 @@ function Resolve-EvidenceFile {
         Require-Condition ($actualHash -eq $ExpectedSha256.ToUpperInvariant()) "evidence hash differs for $RelativePath"
     }
     $fullPath
+}
+
+function Get-ZipEntrySha256 {
+    param([string] $Path, [string] $EntryName, [switch] $Optional)
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $archive = [System.IO.Compression.ZipFile]::OpenRead($Path)
+    try {
+        $entry = $archive.GetEntry($EntryName)
+        if (-not $entry) {
+            if ($Optional) { return $null }
+            throw "Archive entry not found: $EntryName in $Path"
+        }
+        $stream = $entry.Open()
+        $algorithm = [System.Security.Cryptography.SHA256]::Create()
+        try { -join @($algorithm.ComputeHash($stream) | ForEach-Object { $_.ToString('X2') }) }
+        finally { $algorithm.Dispose(); $stream.Dispose() }
+    }
+    finally { $archive.Dispose() }
 }
 
 function Read-Probe {
@@ -184,6 +205,75 @@ function Require-Report {
     }
 }
 
+function Test-FormatSemanticMatrix {
+    param([string] $Format, [object[]] $FormatPhases)
+
+    $p0 = Read-Probe $FormatPhases[0] 0
+    Require-Condition (@($FormatPhases[0].probes).Count -eq 1) "$Format baseline must have one probe"
+
+    $p1 = Read-Probe $FormatPhases[1] 0
+    Require-CellDelta $p1 'A1' @('FormulaAdded') $null ([pscustomobject]@{ formulaText='1+1'; cachedResult='2'; cellType='formula:Number' }) "$Format formula add"
+    Require-Report $FormatPhases[1] 0 1 0 0 @('### Matrix!A1','Formula added','<pre>1+1</pre>','<pre>2</pre>')
+
+    $p2 = Read-Probe $FormatPhases[2] 0
+    Require-CellDelta $p2 'A1' @('FormulaChanged','FormulaResultChanged') ([pscustomobject]@{ formulaText='1+1'; cachedResult='2' }) ([pscustomobject]@{ formulaText='1+2'; cachedResult='3' }) "$Format formula edit"
+    Require-Report $FormatPhases[2] 0 1 1 0 @('### Matrix!A1','Formula changed','Formula result changed','<pre>1+1</pre>','<pre>1+2</pre>','<pre>3</pre>')
+
+    $p3 = Read-Probe $FormatPhases[3] 0
+    Require-CellDelta $p3 'A1' @('FormulaRemoved') ([pscustomobject]@{ formulaText='1+2'; cachedResult='3' }) $null "$Format formula delete"
+    Require-Report $FormatPhases[3] 0 1 0 0 @('### Matrix!A1','Formula removed','<pre>1+2</pre>')
+
+    Require-Condition (@($FormatPhases[4].probes).Count -eq 2) "$Format formula-result phase must have independent formula and precedent probes"
+    $p4Formula = Read-Probe $FormatPhases[4] 0
+    $p4Precedent = Read-Probe $FormatPhases[4] 1
+    Require-CellDelta $p4Formula 'C1' @('FormulaResultChanged') ([pscustomobject]@{ formulaText='D1'; cachedResult='1' }) ([pscustomobject]@{ formulaText='D1'; cachedResult='2' }) "$Format formula result only"
+    Require-CellDelta $p4Precedent 'D1' @('LiteralChanged') ([pscustomobject]@{ literalValue='1'; cellType='Number' }) ([pscustomobject]@{ literalValue='2'; cellType='Number' }) "$Format formula-result precedent"
+    Require-Report $FormatPhases[4] 1 0 1 0 @('### Matrix!C1','### Matrix!D1','Formula result changed','Literal changed','<pre>D1</pre>','<pre>1</pre>','<pre>2</pre>')
+
+    $p5 = Read-Probe $FormatPhases[5] 0
+    Require-CellDelta $p5 'E1' @('CellTypeChanged','LiteralChanged') ([pscustomobject]@{ literalValue='123'; cellType='Number' }) ([pscustomobject]@{ literalValue='EDT-TEXT-123'; cellType='SharedString' }) "$Format literal and type transition"
+    Require-Report $FormatPhases[5] 1 0 0 1 @('### Matrix!E1','Cell type changed','Literal changed','<pre>123</pre>','<pre>EDT-TEXT-123</pre>')
+
+    $p6 = Read-Probe $FormatPhases[6] 0
+    Require-Condition ($p6.latestVersion.cellChangeCount -eq 0 -and $p6.latestVersion.sheetChangeCount -eq 0) "$Format style-only save has a semantic delta"
+    Require-Report $FormatPhases[6] 0 0 0 0 @('None.') -NoTrackedChanges
+
+    $p7 = Read-Probe $FormatPhases[7] 0
+    Require-SheetDelta $p7 'Added' $null ([pscustomobject]@{ name='Matrix Added'; position=1; visibility='Visible' }) "$Format sheet add"
+    Require-Report $FormatPhases[7] 0 0 0 0 @("| Added | $emDash | Matrix Added (position 2, Visible) |")
+
+    $p8 = Read-Probe $FormatPhases[8] 0
+    Require-SheetDelta $p8 'Renamed' ([pscustomobject]@{ name='Matrix Added'; position=1; visibility='Visible' }) ([pscustomobject]@{ name='Matrix Renamed'; position=1; visibility='Visible' }) "$Format sheet rename"
+    Require-Condition ($p8.sheetChange.sheetId -eq $p7.sheetChange.sheetId) "$Format sheet rename did not preserve the stable sheet identity"
+    Require-Report $FormatPhases[8] 0 0 0 0 @('| Renamed | Matrix Added (position 2, Visible) | Matrix Renamed (position 2, Visible) |')
+
+    $p9 = Read-Probe $FormatPhases[9] 0
+    Require-SheetDelta $p9 'Reordered' ([pscustomobject]@{ name='Matrix Renamed'; position=1; visibility='Visible' }) ([pscustomobject]@{ name='Matrix Renamed'; position=0; visibility='Visible' }) "$Format sheet reorder"
+    Require-Condition ($p9.sheetChange.sheetId -eq $p7.sheetChange.sheetId) "$Format sheet reorder did not preserve the stable sheet identity"
+    Require-Report $FormatPhases[9] 0 0 0 0 @('| Reordered | Matrix Renamed (position 2, Visible) | Matrix Renamed (position 1, Visible) |','| Reordered | Matrix (position 1, Visible) | Matrix (position 2, Visible) |')
+
+    $p10 = Read-Probe $FormatPhases[10] 0
+    Require-SheetDelta $p10 'VisibilityChanged' ([pscustomobject]@{ name='Matrix Renamed'; position=0; visibility='Visible' }) ([pscustomobject]@{ name='Matrix Renamed'; position=0; visibility='Hidden' }) "$Format sheet hide"
+    Require-Condition ($p10.sheetChange.sheetId -eq $p7.sheetChange.sheetId) "$Format sheet hide did not preserve the stable sheet identity"
+    Require-Report $FormatPhases[10] 0 0 0 0 @('| Visibility changed | Matrix Renamed (position 1, Visible) | Matrix Renamed (position 1, Hidden) |')
+
+    $p11 = Read-Probe $FormatPhases[11] 0
+    Require-SheetDelta $p11 'VisibilityChanged' ([pscustomobject]@{ name='Matrix Renamed'; position=0; visibility='Hidden' }) ([pscustomobject]@{ name='Matrix Renamed'; position=0; visibility='Visible' }) "$Format sheet unhide"
+    Require-Condition ($p11.sheetChange.sheetId -eq $p7.sheetChange.sheetId) "$Format sheet unhide did not preserve the stable sheet identity"
+    Require-Report $FormatPhases[11] 0 0 0 0 @('| Visibility changed | Matrix Renamed (position 1, Hidden) | Matrix Renamed (position 1, Visible) |')
+
+    $p12 = Read-Probe $FormatPhases[12] 0
+    Require-SheetDelta $p12 'Removed' ([pscustomobject]@{ name='Matrix Renamed'; position=0; visibility='Visible' }) $null "$Format sheet remove"
+    Require-Condition ($p12.sheetChange.sheetId -eq $p7.sheetChange.sheetId) "$Format sheet removal did not preserve the stable sheet identity"
+    Require-Report $FormatPhases[12] 0 0 0 0 @(
+        "| Removed | Matrix Renamed (position 1, Visible) | $emDash |",
+        '| Reordered | Matrix (position 2, Visible) | Matrix (position 1, Visible) |')
+
+    foreach ($phase in $FormatPhases) {
+        Require-Condition (@($phase.probes).Count -eq $(if ($phase.sequence -eq 4) { 2 } else { 1 })) "$Format phase $($phase.sequence) has an unexpected probe count"
+    }
+}
+
 Require-Condition ($result.schemaVersion -eq 1) 'schemaVersion must be 1'
 Require-Condition ($result.gate -eq 'installed-real-excel-semantic-matrix') 'gate identity is wrong'
 Require-Condition ($result.status -eq 'Passed') 'status must be Passed'
@@ -197,10 +287,20 @@ Require-Condition ($result.candidate.expectedInstallerSha256 -eq $installerHash)
 Require-Condition ($result.candidate.applicationSha256 -eq $applicationHash) 'installed executable hash differs'
 Require-Condition ($result.candidate.expectedApplicationSha256 -eq $applicationHash) 'frozen executable hash differs'
 Require-Condition ($result.candidate.probeSha256 -eq $probeHash) 'external acceptance-probe hash differs'
-Require-Condition ($result.workbook.finalSequence -eq 12) 'workbook final sequence must be 12'
+$workbooks = @($result.workbooks)
+Require-Condition ($workbooks.Count -eq 2) 'exactly one xlsx and one xlsm workbook record are required'
+Require-Condition (@($workbooks | Where-Object format -eq 'xlsx').Count -eq 1) 'xlsx workbook record is missing or duplicated'
+Require-Condition (@($workbooks | Where-Object format -eq 'xlsm').Count -eq 1) 'xlsm workbook record is missing or duplicated'
+Require-Condition (@($workbooks | Where-Object finalSequence -ne 12).Count -eq 0) 'both workbook final sequences must be 12'
+$xlsxRecord = $workbooks | Where-Object format -eq 'xlsx'
+$xlsmRecord = $workbooks | Where-Object format -eq 'xlsm'
+$fixtureMacroSha256 = Get-ZipEntrySha256 -Path $sourceXlsm -EntryName 'xl/vbaProject.bin'
+Require-Condition ($null -eq $xlsxRecord.sourceMacroSha256 -and $null -eq $xlsxRecord.baselineMacroSha256) 'xlsx workbook record unexpectedly has a VBA hash'
+Require-Condition ($xlsmRecord.sourceMacroSha256 -eq $fixtureMacroSha256) 'xlsm source VBA hash differs from the supplied deterministic fixture'
+Require-Condition ($xlsmRecord.baselineMacroSha256 -eq $fixtureMacroSha256) 'xlsm fixture preparation changed vbaProject.bin'
 
 $phases = @($result.phases)
-Require-Condition ($phases.Count -eq 13) 'silent baseline plus exactly twelve saves are required'
+Require-Condition ($phases.Count -eq 26) 'two silent baselines plus exactly twenty-four saves are required'
 $expectedNames = @(
     'silent baseline',
     'formula add',
@@ -216,117 +316,70 @@ $expectedNames = @(
     'sheet unhide',
     'sheet remove')
 $expectedCellCounts = @(0,1,1,1,2,1,0,0,0,0,0,0,0)
-$expectedSheetCounts = @(0,0,0,0,0,0,0,1,1,2,1,1,1)
+$expectedSheetCounts = @(0,0,0,0,0,0,0,1,1,2,1,1,2)
 $previousCapturedUtc = $startedUtc
 $allPaths = [System.Collections.Generic.List[string]]::new()
 
-for ($index = 0; $index -lt $phases.Count; $index++) {
-    $phase = $phases[$index]
-    Require-Condition ($phase.sequence -eq $index) "phase index $index has the wrong sequence"
-    Require-Condition ($phase.name -eq $expectedNames[$index]) "phase $index name differs"
-    Require-Condition ($phase.expectedCellChangeCount -eq $expectedCellCounts[$index]) "phase $index expected cell count differs"
-    Require-Condition ($phase.expectedSheetChangeCount -eq $expectedSheetCounts[$index]) "phase $index expected sheet count differs"
-    if ($index -eq 0) {
-        Require-Condition ($phase.transport -eq 'Excel COM fixture setup before tracking; installed-app UIA baseline registration') 'baseline transport record differs'
-        Require-Condition ($null -eq $phase.ctrlSaveUtc) 'baseline unexpectedly records Ctrl+S'
+foreach ($format in @('xlsx','xlsm')) {
+    $formatPhases = @($phases | Where-Object format -eq $format)
+    Require-Condition ($formatPhases.Count -eq 13) "$format must contain one baseline and twelve saves"
+    for ($index = 0; $index -lt $formatPhases.Count; $index++) {
+        $phase = $formatPhases[$index]
+        Require-Condition ($phase.sequence -eq $index) "$format phase index $index has the wrong sequence"
+        Require-Condition ($phase.name -eq $expectedNames[$index]) "$format phase $index name differs"
+        Require-Condition ($phase.expectedCellChangeCount -eq $expectedCellCounts[$index]) "$format phase $index expected cell count differs"
+        Require-Condition ($phase.expectedSheetChangeCount -eq $expectedSheetCounts[$index]) "$format phase $index expected sheet count differs"
+        if ($index -eq 0) {
+            Require-Condition ($phase.transport -eq 'Excel COM fixture setup before tracking; installed-app UIA baseline registration') "$format baseline transport record differs"
+            Require-Condition ($null -eq $phase.ctrlSaveUtc) "$format baseline unexpectedly records Ctrl+S"
+        }
+        else {
+            Require-Condition ($phase.transport -eq 'visible Excel keyboard/UIA mutation and Ctrl+S') "$format phase $index was not recorded as a visible Excel keyboard/UIA save"
+            Require-Condition (-not [string]::IsNullOrWhiteSpace($phase.ctrlSaveUtc)) "$format phase $index does not record Ctrl+S"
+            $ctrlSaveUtc = [DateTime]::Parse($phase.ctrlSaveUtc).ToUniversalTime()
+            Require-Condition ($ctrlSaveUtc -ge $startedUtc -and $ctrlSaveUtc -le $finishedUtc) "$format phase $index Ctrl+S timestamp is outside the run"
+        }
+        $actionUtc = [DateTime]::Parse($phase.actionStartedUtc).ToUniversalTime()
+        $capturedUtc = [DateTime]::Parse($phase.capturedUtc).ToUniversalTime()
+        Require-Condition ($actionUtc -ge $startedUtc -and $actionUtc -le $finishedUtc) "$format phase $index action timestamp is outside the fresh run"
+        Require-Condition ($capturedUtc -ge $previousCapturedUtc -and $capturedUtc -le $finishedUtc) "$format phase $index capture timestamp is out of order"
+        Require-Condition ($phase.captureMilliseconds -ge 0 -and $phase.captureMilliseconds -le 60000) "$format phase $index capture duration is invalid"
+        $previousCapturedUtc = $capturedUtc
+        Require-Condition ($phase.workbookSha256 -match '^[A-F0-9]{64}$') "$format phase $index workbook hash is malformed"
+        Require-Condition ($phase.workbookEvidence.sha256 -eq $phase.workbookSha256) "$format phase $index portable workbook record differs"
+        Require-Condition ([System.IO.Path]::GetExtension($phase.workbookEvidence.path) -eq ".$format") "$format phase $index workbook evidence has the wrong extension"
+        $workbookPath = Resolve-EvidenceFile -RelativePath $phase.workbookEvidence.path -ExpectedSha256 $phase.workbookEvidence.sha256
+        if ($format -eq 'xlsm') {
+            $retainedMacroSha256 = Get-ZipEntrySha256 -Path $workbookPath -EntryName 'xl/vbaProject.bin'
+            Require-Condition ($phase.macroSha256 -eq $fixtureMacroSha256) "xlsm phase $index reported VBA hash differs"
+            Require-Condition ($retainedMacroSha256 -eq $fixtureMacroSha256) "xlsm phase $index changed vbaProject.bin"
+        }
+        else {
+            Require-Condition ($null -eq $phase.macroSha256) "xlsx phase $index unexpectedly reports a VBA hash"
+            Require-Condition ($null -eq (Get-ZipEntrySha256 -Path $workbookPath -EntryName 'xl/vbaProject.bin' -Optional)) "xlsx phase $index unexpectedly contains vbaProject.bin"
+        }
+        $allPaths.Add($phase.workbookEvidence.path)
+        $screenshot = Resolve-EvidenceFile -RelativePath $phase.uiEvidence.screenshot -ExpectedSha256 $phase.uiEvidence.screenshotSha256
+        $uiaPath = Resolve-EvidenceFile -RelativePath $phase.uiEvidence.uiaTree -ExpectedSha256 $phase.uiEvidence.uiaTreeSha256
+        $allPaths.Add($phase.uiEvidence.screenshot)
+        $allPaths.Add($phase.uiEvidence.uiaTree)
+        Require-Condition ((Get-Item $screenshot).Length -gt 1024) "$format phase $index screenshot is implausibly small"
+        $uiaText = [System.IO.File]::ReadAllText($uiaPath)
+        Require-Condition ($uiaText.IndexOf("Installed Semantic Matrix.$format", [StringComparison]::Ordinal) -ge 0) "$format phase $index UIA evidence omits the tracked workbook"
+        foreach ($probeRecord in @($phase.probes)) { $allPaths.Add([string]$probeRecord.path) }
+        if ($null -ne $phase.report) { $allPaths.Add([string]$phase.report.path) }
     }
-    else {
-        Require-Condition ($phase.transport -eq 'visible Excel keyboard/UIA mutation and Ctrl+S') "phase $index was not recorded as a visible Excel keyboard/UIA save"
-        Require-Condition (-not [string]::IsNullOrWhiteSpace($phase.ctrlSaveUtc)) "phase $index does not record Ctrl+S"
-        $ctrlSaveUtc = [DateTime]::Parse($phase.ctrlSaveUtc).ToUniversalTime()
-        Require-Condition ($ctrlSaveUtc -ge $startedUtc -and $ctrlSaveUtc -le $finishedUtc) "phase $index Ctrl+S timestamp is outside the run"
-    }
-    $actionUtc = [DateTime]::Parse($phase.actionStartedUtc).ToUniversalTime()
-    $capturedUtc = [DateTime]::Parse($phase.capturedUtc).ToUniversalTime()
-    Require-Condition ($actionUtc -ge $startedUtc -and $actionUtc -le $finishedUtc) "phase $index action timestamp is outside the fresh run"
-    Require-Condition ($capturedUtc -ge $previousCapturedUtc -and $capturedUtc -le $finishedUtc) "phase $index capture timestamp is out of order"
-    Require-Condition ($phase.captureMilliseconds -ge 0 -and $phase.captureMilliseconds -le 60000) "phase $index capture duration is invalid"
-    $previousCapturedUtc = $capturedUtc
-    Require-Condition ($phase.workbookSha256 -match '^[A-F0-9]{64}$') "phase $index workbook hash is malformed"
-    Require-Condition ($phase.workbookEvidence.sha256 -eq $phase.workbookSha256) "phase $index portable workbook record differs"
-    $workbookPath = Resolve-EvidenceFile -RelativePath $phase.workbookEvidence.path -ExpectedSha256 $phase.workbookEvidence.sha256
-    $allPaths.Add($phase.workbookEvidence.path)
-    $screenshot = Resolve-EvidenceFile -RelativePath $phase.uiEvidence.screenshot -ExpectedSha256 $phase.uiEvidence.screenshotSha256
-    $uiaPath = Resolve-EvidenceFile -RelativePath $phase.uiEvidence.uiaTree -ExpectedSha256 $phase.uiEvidence.uiaTreeSha256
-    $allPaths.Add($phase.uiEvidence.screenshot)
-    $allPaths.Add($phase.uiEvidence.uiaTree)
-    Require-Condition ((Get-Item $screenshot).Length -gt 1024) "phase $index screenshot is implausibly small"
-    $uiaText = [System.IO.File]::ReadAllText($uiaPath)
-    Require-Condition ($uiaText.IndexOf('Installed Semantic Matrix.xlsx', [StringComparison]::Ordinal) -ge 0) "phase $index UIA evidence omits the tracked workbook"
-    foreach ($probeRecord in @($phase.probes)) { $allPaths.Add([string]$probeRecord.path) }
-    if ($null -ne $phase.report) { $allPaths.Add([string]$phase.report.path) }
-    $null = $workbookPath
+    Require-Condition (@($formatPhases.workbookSha256 | Select-Object -Unique).Count -eq 13) "$format baseline and saves do not have thirteen unique stable hashes"
 }
 
-Require-Condition (@($phases.workbookSha256 | Select-Object -Unique).Count -eq 13) 'baseline and twelve saves do not have thirteen unique stable hashes'
 Require-Condition (@($allPaths | Select-Object -Unique).Count -eq $allPaths.Count) 'an evidence path is reused by more than one phase'
 
-$p0 = Read-Probe $phases[0] 0
-Require-Condition (@($phases[0].probes).Count -eq 1) 'baseline must have one probe'
-
-$p1 = Read-Probe $phases[1] 0
-Require-CellDelta $p1 'A1' @('FormulaAdded') $null ([pscustomobject]@{ formulaText='1+1'; cachedResult='2'; cellType='formula:Number' }) 'formula add'
-Require-Report $phases[1] 0 1 0 0 @('### Matrix!A1','Formula added','<pre>1+1</pre>','<pre>2</pre>')
-
-$p2 = Read-Probe $phases[2] 0
-Require-CellDelta $p2 'A1' @('FormulaChanged','FormulaResultChanged') ([pscustomobject]@{ formulaText='1+1'; cachedResult='2' }) ([pscustomobject]@{ formulaText='1+2'; cachedResult='3' }) 'formula edit'
-Require-Report $phases[2] 0 1 1 0 @('### Matrix!A1','Formula changed','Formula result changed','<pre>1+1</pre>','<pre>1+2</pre>','<pre>3</pre>')
-
-$p3 = Read-Probe $phases[3] 0
-Require-CellDelta $p3 'A1' @('FormulaRemoved') ([pscustomobject]@{ formulaText='1+2'; cachedResult='3' }) $null 'formula delete'
-Require-Report $phases[3] 0 1 0 0 @('### Matrix!A1','Formula removed','<pre>1+2</pre>')
-
-Require-Condition (@($phases[4].probes).Count -eq 2) 'formula-result phase must have independent formula and precedent probes'
-$p4Formula = Read-Probe $phases[4] 0
-$p4Precedent = Read-Probe $phases[4] 1
-Require-CellDelta $p4Formula 'C1' @('FormulaResultChanged') ([pscustomobject]@{ formulaText='D1'; cachedResult='1' }) ([pscustomobject]@{ formulaText='D1'; cachedResult='2' }) 'formula result only'
-Require-CellDelta $p4Precedent 'D1' @('LiteralChanged') ([pscustomobject]@{ literalValue='1'; cellType='Number' }) ([pscustomobject]@{ literalValue='2'; cellType='Number' }) 'formula-result precedent'
-Require-Report $phases[4] 1 0 1 0 @('### Matrix!C1','### Matrix!D1','Formula result changed','Literal changed','<pre>D1</pre>','<pre>1</pre>','<pre>2</pre>')
-
-$p5 = Read-Probe $phases[5] 0
-Require-CellDelta $p5 'E1' @('CellTypeChanged','LiteralChanged') ([pscustomobject]@{ literalValue='123'; cellType='Number' }) ([pscustomobject]@{ literalValue='EDT-TEXT-123'; cellType='SharedString' }) 'literal and type transition'
-Require-Report $phases[5] 1 0 0 1 @('### Matrix!E1','Cell type changed','Literal changed','<pre>123</pre>','<pre>EDT-TEXT-123</pre>')
-
-$p6 = Read-Probe $phases[6] 0
-Require-Condition ($p6.latestVersion.cellChangeCount -eq 0 -and $p6.latestVersion.sheetChangeCount -eq 0) 'style-only save has a semantic delta'
-Require-Report $phases[6] 0 0 0 0 @('None.') -NoTrackedChanges
-
-$p7 = Read-Probe $phases[7] 0
-Require-SheetDelta $p7 'Added' $null ([pscustomobject]@{ name='Matrix Added'; position=1; visibility='Visible' }) 'sheet add'
-Require-Report $phases[7] 0 0 0 0 @("| Added | $emDash | Matrix Added (position 2, Visible) |")
-
-$p8 = Read-Probe $phases[8] 0
-Require-SheetDelta $p8 'Renamed' ([pscustomobject]@{ name='Matrix Added'; position=1; visibility='Visible' }) ([pscustomobject]@{ name='Matrix Renamed'; position=1; visibility='Visible' }) 'sheet rename'
-Require-Condition ($p8.sheetChange.sheetId -eq $p7.sheetChange.sheetId) 'sheet rename did not preserve the stable sheet identity'
-Require-Report $phases[8] 0 0 0 0 @('| Renamed | Matrix Added (position 2, Visible) | Matrix Renamed (position 2, Visible) |')
-
-$p9 = Read-Probe $phases[9] 0
-Require-SheetDelta $p9 'Reordered' ([pscustomobject]@{ name='Matrix Renamed'; position=1; visibility='Visible' }) ([pscustomobject]@{ name='Matrix Renamed'; position=0; visibility='Visible' }) 'sheet reorder'
-Require-Condition ($p9.sheetChange.sheetId -eq $p7.sheetChange.sheetId) 'sheet reorder did not preserve the stable sheet identity'
-Require-Report $phases[9] 0 0 0 0 @('| Reordered | Matrix Renamed (position 2, Visible) | Matrix Renamed (position 1, Visible) |','| Reordered | Matrix (position 1, Visible) | Matrix (position 2, Visible) |')
-
-$p10 = Read-Probe $phases[10] 0
-Require-SheetDelta $p10 'VisibilityChanged' ([pscustomobject]@{ name='Matrix Renamed'; position=0; visibility='Visible' }) ([pscustomobject]@{ name='Matrix Renamed'; position=0; visibility='Hidden' }) 'sheet hide'
-Require-Condition ($p10.sheetChange.sheetId -eq $p7.sheetChange.sheetId) 'sheet hide did not preserve the stable sheet identity'
-Require-Report $phases[10] 0 0 0 0 @('| Visibility changed | Matrix Renamed (position 1, Visible) | Matrix Renamed (position 1, Hidden) |')
-
-$p11 = Read-Probe $phases[11] 0
-Require-SheetDelta $p11 'VisibilityChanged' ([pscustomobject]@{ name='Matrix Renamed'; position=0; visibility='Hidden' }) ([pscustomobject]@{ name='Matrix Renamed'; position=0; visibility='Visible' }) 'sheet unhide'
-Require-Condition ($p11.sheetChange.sheetId -eq $p7.sheetChange.sheetId) 'sheet unhide did not preserve the stable sheet identity'
-Require-Report $phases[11] 0 0 0 0 @('| Visibility changed | Matrix Renamed (position 1, Hidden) | Matrix Renamed (position 1, Visible) |')
-
-$p12 = Read-Probe $phases[12] 0
-Require-SheetDelta $p12 'Removed' ([pscustomobject]@{ name='Matrix Renamed'; position=0; visibility='Visible' }) $null 'sheet remove'
-Require-Condition ($p12.sheetChange.sheetId -eq $p7.sheetChange.sheetId) 'sheet removal did not preserve the stable sheet identity'
-Require-Report $phases[12] 0 0 0 0 @("| Removed | Matrix Renamed (position 1, Visible) | $emDash |")
-
-foreach ($phase in $phases) {
-    Require-Condition (@($phase.probes).Count -eq $(if ($phase.sequence -eq 4) { 2 } else { 1 })) "phase $($phase.sequence) has an unexpected probe count"
-}
+Test-FormatSemanticMatrix -Format xlsx -FormatPhases @($phases | Where-Object format -eq 'xlsx')
+Test-FormatSemanticMatrix -Format xlsm -FormatPhases @($phases | Where-Object format -eq 'xlsm')
 
 $failedAssertions = @($result.assertions | Where-Object { -not $_.passed })
 Require-Condition ($failedAssertions.Count -eq 0) 'result contains a failed assertion'
-Require-Condition (@($result.assertions).Count -ge 29) 'result does not contain the complete fail-closed assertion set'
+Require-Condition (@($result.assertions).Count -ge 90) 'result does not contain the complete dual-format fail-closed assertion set'
 Require-Condition ([string]::IsNullOrWhiteSpace($result.failure)) 'result contains an unhandled failure'
 $transcript = Resolve-EvidenceFile -RelativePath $result.transcript.path -ExpectedSha256 $result.transcript.sha256
 Require-Condition ((Get-Item $transcript).Length -gt 0) 'transcript is empty'
