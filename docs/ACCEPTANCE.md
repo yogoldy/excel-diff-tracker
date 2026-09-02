@@ -27,6 +27,8 @@ Record the source commit/tag; installer and installed-executable hashes; VM snap
 5. With startup enabled, log off/on and require a quiet tray start plus a working dashboard.
 6. Verify in-place upgrade preserves synthetic history, then verify uninstall removes binaries, shortcuts, and startup registration while following the documented data-retention behavior.
 
+The release-level lifecycle requirement is a separate two-phase installed gate using a real prior public installer and a strictly newer candidate. Run [the installed lifecycle and in-place-upgrade procedure](INSTALLED_LIFECYCLE_UPGRADE.md), perform the required Windows logoff/sign-in outside the scripts, and retain exactly one validated `installed-lifecycle-upgrade.json` in the aggregate evidence tree. The aggregate validator independently binds it to the exact prior installer/application/version, candidate installer/application/version, and acceptance probe. The per-run tray/relaunch/background/repair checks remain useful supporting coverage but cannot replace this exact upgrade-and-new-logon proof.
+
 ### Real Excel `.xlsx` and `.xlsm`
 
 For both formats, add the fixture through the installed UI while it is already open in visible Excel. Leave Excel open for at least 90 seconds after each save.

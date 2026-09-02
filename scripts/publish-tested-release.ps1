@@ -9,6 +9,14 @@ param(
     [string]$ProbePath,
     [Parameter(Mandatory = $true)]
     [string]$XlsmFixture,
+    [Parameter(Mandatory = $true)]
+    [string]$PriorInstallerPath,
+    [Parameter(Mandatory = $true)]
+    [ValidatePattern('^[A-Fa-f0-9]{64}$')]
+    [string]$ExpectedPriorApplicationSha256,
+    [Parameter(Mandatory = $true)]
+    [ValidatePattern('^\d+\.\d+\.\d+$')]
+    [string]$PriorVersion,
     [switch]$Prerelease
 )
 
@@ -19,6 +27,7 @@ if (-not $ProbePath) { $ProbePath = Join-Path $repositoryRoot 'artifacts\accepta
 $ReleaseDirectory = (Resolve-Path $ReleaseDirectory).Path
 $ProbePath = (Resolve-Path $ProbePath).Path
 $XlsmFixture = (Resolve-Path $XlsmFixture).Path
+$PriorInstallerPath = (Resolve-Path $PriorInstallerPath).Path
 $installer = Join-Path $ReleaseDirectory 'ExcelDiffTracker-Setup-arm64.exe'
 $checksumFile = Join-Path $ReleaseDirectory 'SHA256SUMS.txt'
 $releaseNotes = Join-Path $repositoryRoot "docs\RELEASE_NOTES_$Version.md"
@@ -31,7 +40,15 @@ foreach ($required in @($installer, $checksumFile, $releaseNotes, $wingetManifes
 $actualHash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToUpperInvariant()
 $acceptanceDirectoryPath = (Resolve-Path $AcceptanceDirectory).Path
 $acceptanceValidator = Join-Path $repositoryRoot 'scripts\acceptance\Test-AcceptanceEvidence.ps1'
-$null = & $acceptanceValidator -AcceptanceDirectory $acceptanceDirectoryPath -InstallerPath $installer -ProbePath $ProbePath -XlsmFixture $XlsmFixture
+$null = & $acceptanceValidator `
+    -AcceptanceDirectory $acceptanceDirectoryPath `
+    -InstallerPath $installer `
+    -ProbePath $ProbePath `
+    -XlsmFixture $XlsmFixture `
+    -PriorInstallerPath $PriorInstallerPath `
+    -ExpectedPriorApplicationSha256 $ExpectedPriorApplicationSha256 `
+    -PriorVersion $PriorVersion `
+    -CandidateVersion $Version
 $approvalPath = Join-Path $acceptanceDirectoryPath 'approval.json'
 if (-not (Test-Path $approvalPath)) {
     throw 'Acceptance approval is missing. Run scripts\acceptance\Test-AcceptanceEvidence.ps1 first.'

@@ -4,6 +4,10 @@ param(
     [Parameter(Mandatory)] [string] $InstallerPath,
     [Parameter(Mandatory)] [string] $ProbePath,
     [Parameter(Mandatory)] [string] $XlsmFixture,
+    [Parameter(Mandatory)] [string] $PriorInstallerPath,
+    [Parameter(Mandatory)] [ValidatePattern('^[A-Fa-f0-9]{64}$')] [string] $ExpectedPriorApplicationSha256,
+    [Parameter(Mandatory)] [ValidatePattern('^\d+\.\d+\.\d+$')] [string] $PriorVersion,
+    [Parameter(Mandatory)] [ValidatePattern('^\d+\.\d+\.\d+$')] [string] $CandidateVersion,
     [ValidateRange(2, 10)] [int] $RequiredRunCount = 2
 )
 
@@ -14,12 +18,18 @@ $root = (Resolve-Path $AcceptanceDirectory).Path
 $installer = (Resolve-Path $InstallerPath).Path
 $probe = (Resolve-Path $ProbePath).Path
 $xlsmFixture = (Resolve-Path $XlsmFixture).Path
+$priorInstaller = (Resolve-Path $PriorInstallerPath).Path
 $installerHash = Get-AcceptanceFileSha256 -Path $installer
 $largeBenchmarkValidator = (Resolve-Path (Join-Path $PSScriptRoot 'Test-LargeWorkbookBenchmarkResult.ps1')).Path
 $soakValidator = (Resolve-Path (Join-Path $PSScriptRoot 'Test-RealExcelSoakResult.ps1')).Path
 $semanticMatrixValidator = (Resolve-Path (Join-Path $PSScriptRoot 'Test-InstalledSemanticMatrixResult.ps1')).Path
 $visualMatrixValidator = (Resolve-Path (Join-Path $PSScriptRoot 'Test-VisualMatrixBundle.ps1')).Path
 $recoveryMatrixValidator = (Resolve-Path (Join-Path $PSScriptRoot 'Test-InstalledRecoveryMatrixResult.ps1')).Path
+$lifecycleUpgradeValidator = (Resolve-Path (Join-Path $PSScriptRoot 'Test-InstalledLifecycleUpgradeResult.ps1')).Path
+
+if ([version]$CandidateVersion -le [version]$PriorVersion) {
+    throw "CandidateVersion must be newer than PriorVersion; got $PriorVersion -> $CandidateVersion."
+}
 
 function Test-ChecksumManifest {
     param([string] $RunDirectory)
@@ -305,6 +315,23 @@ if (@($runSummaries.sourceCommit | Select-Object -Unique).Count -ne 1) {
     throw 'The two clean acceptance runs name different source commits.'
 }
 
+$lifecycleUpgradeResults = @(Get-ChildItem $root -Filter 'installed-lifecycle-upgrade.json' -File -Recurse)
+if ($lifecycleUpgradeResults.Count -ne 1) {
+    throw "Expected exactly one mandatory installed lifecycle/upgrade result, found $($lifecycleUpgradeResults.Count)."
+}
+$lifecycleUpgradeValidation = & $lifecycleUpgradeValidator `
+    -ResultPath $lifecycleUpgradeResults[0].FullName `
+    -PriorInstallerPath $priorInstaller `
+    -ExpectedPriorApplicationSha256 $ExpectedPriorApplicationSha256 `
+    -PriorVersion $PriorVersion `
+    -CandidateInstallerPath $installer `
+    -ExpectedCandidateApplicationSha256 $runSummaries[0].installedApplicationSha256 `
+    -CandidateVersion $CandidateVersion `
+    -ProbePath $probe
+if (@($lifecycleUpgradeValidation).Count -ne 1 -or [string]$lifecycleUpgradeValidation -notlike 'INSTALLED_LIFECYCLE_UPGRADE_VALID|*') {
+    throw 'The exact installed lifecycle/upgrade validator did not approve the candidate.'
+}
+
 $visualValidation = & $visualMatrixValidator `
     -EvidenceRoot $root `
     -ExpectedInstallerSha256 $installerHash `
@@ -371,6 +398,12 @@ $approval = [ordered]@{
     evidenceSha256 = $evidenceDigest
     approvedUtc = [DateTime]::UtcNow.ToString('O')
     runs = $runSummaries
+    lifecycleUpgrade = [ordered]@{
+        priorVersion = $PriorVersion
+        candidateVersion = $CandidateVersion
+        resultPath = $lifecycleUpgradeResults[0].FullName
+        status = 'Passed'
+    }
     visualMatrixCount = $visualMatrices.Count
     attestations = $attestations
 }
