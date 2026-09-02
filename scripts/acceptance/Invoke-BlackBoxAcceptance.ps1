@@ -525,6 +525,8 @@ function Invoke-LockedRecoveryGate {
 
 function Invoke-LifecycleGate {
     $resultPath = Join-Path $lifecycleResults 'lifecycle.json'
+    $lifecycleEvidenceId = [Guid]::NewGuid().ToString('D')
+    $lifecycleStartedUtc = [DateTime]::UtcNow
     $checks = [ordered]@{
         closeKeepsTrayProcessAlive = $false
         actualTrayIconReopensWindow = $false
@@ -599,9 +601,13 @@ function Invoke-LifecycleGate {
     }
     finally {
         $lifecycle = [ordered]@{
-            schemaVersion = 1
+            schemaVersion = 2
             gate = 'installed-app-lifecycle'
+            evidenceId = $lifecycleEvidenceId
+            outerRunEvidenceId = $runEvidenceId
             status = if ($null -eq $failure -and @($checks.GetEnumerator() | Where-Object { -not $_.Value }).Count -eq 0) { 'Passed' } else { 'Failed' }
+            startedUtc = $lifecycleStartedUtc.ToString('O')
+            finishedUtc = [DateTime]::UtcNow.ToString('O')
             checks = $checks
             startupValue = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name ExcelDiffTracker -ErrorAction SilentlyContinue).ExcelDiffTracker
             failure = $failure

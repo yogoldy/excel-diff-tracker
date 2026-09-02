@@ -234,12 +234,24 @@ function Test-GoldenExcelEvidence {
 }
 
 function Test-LifecycleEvidence {
-    param([string] $RunDirectory, [object] $Environment)
+    param(
+        [string] $RunDirectory,
+        [object] $Environment,
+        [string] $ExpectedOuterRunEvidenceId,
+        [datetime] $OuterStartedUtc,
+        [datetime] $OuterFinishedUtc
+    )
     $path = Join-Path $RunDirectory 'lifecycle\lifecycle.json'
     if (-not (Test-Path $path -PathType Leaf)) { throw "Mandatory installed-app lifecycle evidence is missing: $path" }
     $lifecycle = Get-Content $path -Raw | ConvertFrom-Json
-    if ($lifecycle.schemaVersion -ne 1 -or $lifecycle.gate -ne 'installed-app-lifecycle' -or $lifecycle.status -ne 'Passed') {
+    if ($lifecycle.schemaVersion -ne 2 -or $lifecycle.gate -ne 'installed-app-lifecycle' -or $lifecycle.status -ne 'Passed' -or
+        [string]$lifecycle.evidenceId -notmatch $guidPattern -or $lifecycle.outerRunEvidenceId -ne $ExpectedOuterRunEvidenceId) {
         throw "Installed-app lifecycle gate did not pass: $path"
+    }
+    $lifecycleStartedUtc = [DateTime]::Parse([string]$lifecycle.startedUtc).ToUniversalTime()
+    $lifecycleFinishedUtc = [DateTime]::Parse([string]$lifecycle.finishedUtc).ToUniversalTime()
+    if ($lifecycleFinishedUtc -le $lifecycleStartedUtc -or $lifecycleStartedUtc -lt $OuterStartedUtc -or $lifecycleFinishedUtc -gt $OuterFinishedUtc) {
+        throw "Installed-app lifecycle timestamps are outside the exact outer run: $path"
     }
     $required = @(
         'closeKeepsTrayProcessAlive', 'actualTrayIconReopensWindow', 'trayExitStopsProcess',
@@ -264,6 +276,7 @@ function Test-LifecycleEvidence {
         $evidencePath = Join-Path $RunDirectory $requiredFile
         if (-not (Test-Path $evidencePath -PathType Leaf) -or (Get-Item $evidencePath).Length -le 0) { throw "Lifecycle UI evidence is missing: $evidencePath" }
     }
+    [pscustomobject]@{ evidenceId = ([string]$lifecycle.evidenceId).ToLowerInvariant(); startedUtc = $lifecycleStartedUtc; finishedUtc = $lifecycleFinishedUtc }
 }
 
 $runs = @(Get-ChildItem $root -Directory -Recurse | Where-Object { Test-Path (Join-Path $_.FullName 'acceptance.json') })
@@ -332,7 +345,7 @@ $runSummaries = foreach ($run in $runs | Sort-Object Name) {
         throw "Acceptance summary names a different source manifest: $($run.FullName)"
     }
     Test-GoldenExcelEvidence $run.FullName
-    Test-LifecycleEvidence $run.FullName $environment
+    $inlineLifecycleIdentity = Test-LifecycleEvidence $run.FullName $environment $summary.runEvidenceId $outerStartedUtc $outerFinishedUtc
     if ($environment.isAdministrator -ne $false) { throw "Acceptance run did not use a standard non-administrator account: $environmentPath" }
     if ($environment.dotnetOnPath -ne $false) { throw "Development .NET was present on PATH during acceptance: $environmentPath" }
     if ($environment.os.OSArchitecture -notlike 'ARM*') { throw "Acceptance run did not use Windows ARM64: $environmentPath" }
@@ -389,7 +402,8 @@ $runSummaries = foreach ($run in $runs | Sort-Object Name) {
         -ExpectedOuterRunEvidenceId $summary.runEvidenceId
     $recoveryMatrixIdentity = Get-InstalledSubgateIdentity -ResultPath $recoveryMatrixResults[0].FullName -ExpectedOuterRunEvidenceId $summary.runEvidenceId -OuterStartedUtc $outerStartedUtc -OuterFinishedUtc $outerFinishedUtc -GateName 'recovery matrix'
 
-    if ($semanticIdentity.finishedUtc -gt $recoveryMatrixIdentity.startedUtc -or
+    if ($inlineLifecycleIdentity.finishedUtc -gt $semanticIdentity.startedUtc -or
+        $semanticIdentity.finishedUtc -gt $recoveryMatrixIdentity.startedUtc -or
         $recoveryMatrixIdentity.finishedUtc -gt $largeIdentity.startedUtc -or
         $largeIdentity.finishedUtc -gt $soakIdentity.startedUtc) {
         throw "Installed subgate timestamps are reordered or overlapping: $($run.FullName)"
@@ -403,7 +417,7 @@ $runSummaries = foreach ($run in $runs | Sort-Object Name) {
         startedUtc = $outerStartedUtc
         finishedUtc = $outerFinishedUtc
         manifestSha256 = $runManifestSha256
-        subgateEvidenceIds = @($semanticIdentity.evidenceId, $recoveryMatrixIdentity.evidenceId, $largeIdentity.evidenceId, $soakIdentity.evidenceId)
+        subgateEvidenceIds = @($inlineLifecycleIdentity.evidenceId, $semanticIdentity.evidenceId, $recoveryMatrixIdentity.evidenceId, $largeIdentity.evidenceId, $soakIdentity.evidenceId)
         sourceCommit = $summary.sourceCommit
         releaseCommit = $summary.releaseCommit
         sourceManifestSha256 = $summary.sourceManifestSha256.ToUpperInvariant()
@@ -427,7 +441,7 @@ if (@($runSummaries.manifestSha256 | Select-Object -Unique).Count -ne $RequiredR
     throw 'Black-box acceptance whole-run evidence manifests are identical.'
 }
 $allEvidenceIds = @($runSummaries | ForEach-Object { @($_.runEvidenceId) + @($_.subgateEvidenceIds) })
-if (@($allEvidenceIds | Select-Object -Unique).Count -ne ($RequiredRunCount * 5)) {
+if (@($allEvidenceIds | Select-Object -Unique).Count -ne ($RequiredRunCount * 6)) {
     throw 'Outer and installed-subgate evidence IDs must be globally unique across acceptance runs.'
 }
 $requiredRunNumbers = @(1..$RequiredRunCount)
@@ -458,6 +472,15 @@ $lifecycleUpgradeValidation = & $lifecycleUpgradeValidator `
 if (@($lifecycleUpgradeValidation).Count -ne 1 -or [string]$lifecycleUpgradeValidation -notlike 'INSTALLED_LIFECYCLE_UPGRADE_VALID|*') {
     throw 'The exact installed lifecycle/upgrade validator did not approve the candidate.'
 }
+$lifecycleUpgradeResult = Get-Content $lifecycleUpgradeResults[0].FullName -Raw | ConvertFrom-Json
+$lifecycleUpgradePrePath = Join-Path (Split-Path -Parent $lifecycleUpgradeResults[0].FullName) 'pre-logoff.json'
+$lifecycleUpgradePre = Get-Content $lifecycleUpgradePrePath -Raw | ConvertFrom-Json
+$lifecycleUpgradeStartedUtc = [DateTime]::Parse([string]$lifecycleUpgradePre.startedUtc).ToUniversalTime()
+$lifecycleUpgradeCompletedUtc = [DateTime]::Parse([string]$lifecycleUpgradeResult.completedUtc).ToUniversalTime()
+if ($lifecycleUpgradeStartedUtc -lt $acceptanceCutoffDateTimeUtc -or $lifecycleUpgradeCompletedUtc -le $lifecycleUpgradeStartedUtc -or
+    $lifecycleUpgradeCompletedUtc -gt $validationStartedUtc.AddMinutes(5)) {
+    throw 'Installed lifecycle/upgrade evidence predates the acceptance cutoff or has invalid aggregate timestamps.'
+}
 
 $visualValidation = & $visualMatrixValidator `
     -EvidenceRoot $root `
@@ -468,10 +491,28 @@ if ($visualValidation.status -ne 'Approved') {
     throw 'The strict visual/accessibility bundle validator did not approve the candidate.'
 }
 $visualMatrices = @(Get-ChildItem $root -Filter visual-matrix.json -File -Recurse)
-$lifecycleUpgradeResult = Get-Content $lifecycleUpgradeResults[0].FullName -Raw | ConvertFrom-Json
+$visualContrastArtifacts = @(Get-ChildItem $root -Filter visual-contrast.json -File -Recurse)
+$visualLifecycleArtifacts = @(Get-ChildItem $root -Filter visual-lifecycle.json -File -Recurse)
+if ($visualContrastArtifacts.Count -ne 1 -or $visualLifecycleArtifacts.Count -ne 1) {
+    throw 'Aggregate visual freshness requires exactly one contrast and one lifecycle artifact.'
+}
+$visualContrast = Get-Content $visualContrastArtifacts[0].FullName -Raw | ConvertFrom-Json
+$visualLifecycle = Get-Content $visualLifecycleArtifacts[0].FullName -Raw | ConvertFrom-Json
+$visualTimes = @([DateTime]::Parse([string]$visualContrast.capturedUtc).ToUniversalTime(), [DateTime]::Parse([string]$visualLifecycle.capturedUtc).ToUniversalTime())
+foreach ($state in @($visualLifecycle.states)) { $visualTimes += [DateTime]::Parse([string]$state.capturedUtc).ToUniversalTime() }
+foreach ($matrixPath in $visualMatrices) {
+    $matrix = Get-Content $matrixPath.FullName -Raw | ConvertFrom-Json
+    $visualTimes += [DateTime]::Parse([string]$matrix.firstCapturedUtc).ToUniversalTime()
+    $visualTimes += [DateTime]::Parse([string]$matrix.capturedUtc).ToUniversalTime()
+    $visualTimes += [DateTime]::Parse([string]$matrix.humanReview.reviewedUtc).ToUniversalTime()
+}
+if (@($visualTimes | Where-Object { $_ -lt $acceptanceCutoffDateTimeUtc -or $_ -gt $validationStartedUtc.AddMinutes(5) }).Count -ne 0) {
+    throw 'Visual capture or approval evidence predates the acceptance cutoff or is future-dated.'
+}
 $latestEvidenceUtc = @(
     @($runSummaries | ForEach-Object { $_.finishedUtc })
-    @([DateTime]::Parse([string]$lifecycleUpgradeResult.completedUtc).ToUniversalTime())
+    @($lifecycleUpgradeCompletedUtc)
+    @($visualTimes)
     @($visualMatrices | ForEach-Object {
         $matrix = Get-Content $_.FullName -Raw | ConvertFrom-Json
         [DateTime]::Parse([string]$matrix.humanReview.reviewedUtc).ToUniversalTime()
