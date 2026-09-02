@@ -226,8 +226,8 @@ Require-Condition ((Get-Hash (Resolve-EvidenceRecord $pre.candidate.retainedAppl
 Require-Condition ($pre.prior.uninstallEntryBeforeUpgrade.displayVersion -eq $PriorVersion -and $pre.candidate.uninstallEntryAfterUpgrade.displayVersion -eq $CandidateVersion) 'installed prior/candidate DisplayVersion identity is incomplete'
 Require-Condition ($pre.prior.uninstallEntryBeforeUpgrade.registryPath -eq $pre.candidate.uninstallEntryAfterUpgrade.registryPath) 'candidate did not upgrade the same product registration in place'
 Require-Condition ($pre.candidate.installMode -eq 'in-place-over-prior-without-uninstall') 'candidate install is labeled as repair or replacement rather than in-place upgrade'
-$candidateInstallStart = [DateTime]::Parse([string]$pre.candidate.installStartedUtc).ToUniversalTime()
-$candidateInstallEnd = [DateTime]::Parse([string]$pre.candidate.installCompletedUtc).ToUniversalTime()
+$candidateInstallStart = Get-EvidenceUtc $pre.candidate.installStartedUtc 'candidate install start'
+$candidateInstallEnd = Get-EvidenceUtc $pre.candidate.installCompletedUtc 'candidate install completion'
 Require-Condition ($candidateInstallEnd -gt $candidateInstallStart) 'candidate install timestamps are invalid'
 Require-Condition ($pre.database.closedBeforeUpgrade.sha256 -eq $pre.database.immediatelyAfterInstaller.sha256 -and $pre.database.closedBeforeUpgrade.bytes -eq $pre.database.immediatelyAfterInstaller.bytes) 'closed database bytes changed during candidate upgrade'
 Validate-DatabaseRecords @($pre.database.beforeUpgradeCopies) 'pre-upgrade database checkpoint'
@@ -255,6 +255,9 @@ $postCompleted = Get-EvidenceUtc $result.completedUtc 'post-logon completion'
 Require-Condition ($preCompleted -gt $preStarted -and $preResultCompleted -eq $preCompleted) 'pre-logoff result and pending completion timestamps differ or are unordered'
 Require-Condition ($pendingCreated -ge $preCompleted -and $pendingCreated -le $postCompleted) 'pending-state creation timestamp is outside the linked lifecycle'
 Require-Condition ($postCompleted -gt $postStarted -and $postStarted -gt $preCompleted) 'post-logon phase does not follow pre-logoff completion'
+Require-Condition ($candidateInstallStart -ge $preStarted -and $candidateInstallEnd -le $preCompleted) 'candidate install did not occur entirely within the pre-logoff phase'
+$pendingProcessStarted = Get-EvidenceUtc $pre.pendingProcess.startedUtc 'pending candidate process start'
+Require-Condition ($pendingProcessStarted -ge $candidateInstallEnd -and $pendingProcessStarted -le $preCompleted) 'pending candidate process did not start after installation within the pre-logoff phase'
 
 $preLogonCaptured = Get-EvidenceUtc $pre.environment.preLogon.capturedUtc 'pre-logoff logon identity capture'
 $pendingPreLogonCaptured = Get-EvidenceUtc $pending.preLogon.capturedUtc 'pending pre-logoff logon identity capture'

@@ -492,6 +492,7 @@ $lifecycleUpgradeTimes = @(
     [DateTime]::Parse([string]$lifecycleUpgradeResult.autoStart.processStartedUtc).ToUniversalTime()
     [DateTime]::Parse([string]$lifecycleUpgradePre.candidate.installStartedUtc).ToUniversalTime()
     [DateTime]::Parse([string]$lifecycleUpgradePre.candidate.installCompletedUtc).ToUniversalTime()
+    [DateTime]::Parse([string]$lifecycleUpgradePre.pendingProcess.startedUtc).ToUniversalTime()
     [DateTime]::Parse([string]$lifecycleUpgradeResult.uninstall.startedUtc).ToUniversalTime()
     [DateTime]::Parse([string]$lifecycleUpgradeResult.uninstall.completedUtc).ToUniversalTime()
     $lifecycleUpgradeCompletedUtc

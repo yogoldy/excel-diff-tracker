@@ -145,7 +145,7 @@ foreach ($matrixPath in $matrixPaths) {
     $environmentCaptured = [DateTime]::MinValue
     if (-not [DateTime]::TryParse($matrix.actualEnvironment.capturedUtc,[ref]$environmentCaptured)) { throw "Visual matrix environment timestamp is missing or invalid: $($matrixPath.FullName)" }
     $environmentCaptured = $environmentCaptured.ToUniversalTime()
-    if ($environmentCaptured -gt $firstCaptured) { throw "Visual matrix environment was captured after state capture began: $($matrixPath.FullName)" }
+    if ($environmentCaptured -gt $lastCaptured) { throw "Visual matrix environment was captured after the matrix completed: $($matrixPath.FullName)" }
     $stateNames = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $referencedFiles = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $previousStateCaptured = $firstCaptured
