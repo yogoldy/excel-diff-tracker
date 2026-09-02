@@ -16,6 +16,11 @@ $output = Join-Path $root 'contrast'
 if (Test-Path $output) { throw "Fresh contrast evidence is required; the output already exists: $output" }
 New-Item -ItemType Directory -Path $output | Out-Null
 $source = (Resolve-Path $ThemeManagerSourcePath).Path
+$repositoryRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$canonicalSource = (Resolve-Path (Join-Path $repositoryRoot 'src\ExcelDiffTracker.App\Services\ThemeManager.cs')).Path
+if (-not [string]::Equals($source,$canonicalSource,[StringComparison]::OrdinalIgnoreCase)) {
+    throw "ThemeManagerSourcePath must be the canonical source in this acceptance checkout: $canonicalSource"
+}
 $sourceCopy = Join-Path $output 'ThemeManager.cs'
 Copy-Item -LiteralPath $source -Destination $sourceCopy
 

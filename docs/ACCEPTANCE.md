@@ -97,7 +97,7 @@ scripts\acceptance\Capture-VisualMatrix.ps1 @common -CapturePhase Main -Expected
 
 Repeat the main phase after changing the real Windows display/theme state, update only `ExpectedScalePercent`, and use the same session/candidate identity. Use `-WindowSizeMode Minimum`, `Default`, and `Resized` across the set, and use `-WindowsContrastTheme` only while Windows actually reports a contrast theme. Supplemental calls use `-CapturePhase Supplemental -StateName <state>` after arranging the transient state; use `-UseDesktopRoot` for the open tray menu. Processing capture requires an exact visible product status of `Processing`, warning requires an exact `Warning` status, and error requires one recognized exact capture-error category/stage on the active History page; supply that exact value through `-ExpectedStateText`. Toast capture requires a visible named `StatusToast`; tray capture requires the three product-owned menu items; and long-path capture requires the accessible full path and HelpText. A state label or arbitrary product text is never accepted as evidence. Never reuse an evidence directory after a failed or partial candidate run.
 
-Create deterministic palette evidence from the exact `ThemeManager.cs` source used for the candidate build. The helper copies and hashes that source, independently calculates WCAG relative luminance and ratios for every reviewed foreground/background contract in both fixed themes, and fails below 4.5:1 for normal text or 3:1 for large text and essential UI:
+Create deterministic palette evidence from the canonical `ThemeManager.cs` in the acceptance checkout. The helper rejects any alternate path, copies and hashes the canonical source, independently calculates WCAG relative luminance and ratios for every reviewed foreground/background contract in both fixed themes, and fails below 4.5:1 for normal text or 3:1 for large text and essential UI. The validator separately resolves that canonical repository path relative to its own script and requires byte-for-byte hash equality, so caller-supplied candidate labels cannot substitute a different palette:
 
 ```powershell
 scripts\acceptance\New-VisualContrastEvidence.ps1 `
@@ -150,7 +150,7 @@ scripts\acceptance\Approve-VisualMatrixBundle.ps1 `
   -ApproveContrast -ApproveClippingAndOverlap -ApproveKeyboardAndFocus -ApproveThemeTransitions
 ```
 
-Omitting any approval, reviewer identity, or substantive notes fails. Numeric palette success alone cannot substitute for rendered screenshot review. The helper first validates the complete machine bundle, writes `Approved` only to that exact candidate/session, then validates it again with human approval required. Any later capture resets its matrix to pending and therefore invalidates aggregate release approval.
+Omitting any approval, reviewer identity, or substantive notes fails. Numeric palette success alone cannot substitute for rendered screenshot review. The helper first validates the complete machine bundle, then records one approval time after every contrast/lifecycle capture and binds every matrix to the exact capture session plus SHA-256 of the contrast and lifecycle artifacts. It validates the bundle again with human approval required. Replacing or regenerating either artifact invalidates the binding and requires a fresh human review; any later matrix capture also resets its matrix to pending.
 
 ### Soak
 

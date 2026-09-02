@@ -26,7 +26,20 @@ $validator = (Resolve-Path (Join-Path $PSScriptRoot 'Test-VisualMatrixBundle.ps1
 $preApproval = & $validator -EvidenceRoot $root -ExpectedInstallerSha256 $ExpectedInstallerSha256 -ExpectedApplicationSha256 $ExpectedApplicationSha256
 if ($preApproval.status -ne 'MachineChecksPassedHumanReviewRequired' -and $preApproval.status -ne 'Approved') { throw 'Visual bundle did not pass its machine gate.' }
 
+$contrastPaths = @(Get-ChildItem $root -Filter 'visual-contrast.json' -File -Recurse)
+$lifecyclePaths = @(Get-ChildItem $root -Filter 'visual-lifecycle.json' -File -Recurse)
+if ($contrastPaths.Count -ne 1 -or $lifecyclePaths.Count -ne 1) { throw 'Exactly one contrast and one lifecycle artifact are required before human approval.' }
+$contrast = Get-Content $contrastPaths[0].FullName -Raw | ConvertFrom-Json
+$lifecycle = Get-Content $lifecyclePaths[0].FullName -Raw | ConvertFrom-Json
+$latestCaptureUtc = ([DateTime]$contrast.capturedUtc).ToUniversalTime()
+foreach ($timestamp in @($lifecycle.capturedUtc) + @($lifecycle.states | ForEach-Object { $_.capturedUtc })) {
+    $captureUtc = ([DateTime]$timestamp).ToUniversalTime()
+    if ($captureUtc -gt $latestCaptureUtc) { $latestCaptureUtc = $captureUtc }
+}
 $reviewedUtc = [DateTime]::UtcNow.ToString('O')
+if (([DateTime]$reviewedUtc).ToUniversalTime() -lt $latestCaptureUtc) { throw 'Human approval cannot predate contrast or lifecycle capture.' }
+$contrastArtifactHash = Get-AcceptanceFileSha256 $contrastPaths[0].FullName
+$lifecycleArtifactHash = Get-AcceptanceFileSha256 $lifecyclePaths[0].FullName
 $matrixPaths = @(Get-ChildItem $root -Filter 'visual-matrix.json' -File -Recurse | Sort-Object FullName)
 foreach ($matrixPath in $matrixPaths) {
     $matrix = Get-Content $matrixPath.FullName -Raw | ConvertFrom-Json
@@ -37,6 +50,12 @@ foreach ($matrixPath in $matrixPaths) {
     $matrix.humanReview.keyboardAndFocus = 'Approved'
     if ($null -eq $matrix.humanReview.PSObject.Properties['themeTransitions']) { $matrix.humanReview | Add-Member -NotePropertyName themeTransitions -NotePropertyValue 'Approved' }
     else { $matrix.humanReview.themeTransitions = 'Approved' }
+    foreach ($binding in @(
+        @{ name = 'captureSessionId'; value = $preApproval.captureSessionId },
+        @{ name = 'contrastArtifactSha256'; value = $contrastArtifactHash },
+        @{ name = 'lifecycleArtifactSha256'; value = $lifecycleArtifactHash })) {
+        $matrix.humanReview | Add-Member -NotePropertyName $binding.name -NotePropertyValue $binding.value -Force
+    }
     $matrix.humanReview.reviewer = $Reviewer.Trim()
     $matrix.humanReview.reviewedUtc = $reviewedUtc
     $matrix.humanReview.notes = $Notes.Trim()

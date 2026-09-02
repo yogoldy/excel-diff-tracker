@@ -100,6 +100,9 @@ $sessionIds = [System.Collections.Generic.HashSet[string]]::new([StringComparer]
 $automationIdentity = @{}
 $humanReviewers = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
 $humanReviewTimes = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+$humanCaptureSessions = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+$humanContrastHashes = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+$humanLifecycleHashes = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 foreach ($matrixPath in $matrixPaths) {
     $matrixDirectory = Split-Path -Parent $matrixPath.FullName
     $matrix = Get-Content $matrixPath.FullName -Raw | ConvertFrom-Json
@@ -114,10 +117,14 @@ foreach ($matrixPath in $matrixPaths) {
             throw "Visual matrix human contrast/clipping/focus/theme-transition review is incomplete: $($matrixPath.FullName)"
         }
         if ($matrix.humanReview.reviewer.Trim().Length -lt 3 -or $matrix.humanReview.notes.Trim().Length -lt 20) { throw "Visual matrix human reviewer identity or notes were weakened after approval: $($matrixPath.FullName)" }
+        if ($matrix.humanReview.captureSessionId -ne $matrix.captureSessionId -or $matrix.humanReview.contrastArtifactSha256 -notmatch '^[A-Fa-f0-9]{64}$' -or $matrix.humanReview.lifecycleArtifactSha256 -notmatch '^[A-Fa-f0-9]{64}$') { throw "Visual human approval is not bound to its capture session and exact contrast/lifecycle artifacts: $($matrixPath.FullName)" }
         $reviewedAt = [DateTime]::MinValue
         if (-not [DateTime]::TryParse($matrix.humanReview.reviewedUtc,[ref]$reviewedAt) -or $reviewedAt.ToUniversalTime() -lt ([DateTime]$matrix.capturedUtc).ToUniversalTime() -or $reviewedAt.ToUniversalTime() -gt [DateTime]::UtcNow.AddMinutes(5)) { throw "Visual matrix human approval time is invalid or predates capture: $($matrixPath.FullName)" }
         [void]$humanReviewers.Add($matrix.humanReview.reviewer.Trim())
         [void]$humanReviewTimes.Add($reviewedAt.ToUniversalTime().ToString('O'))
+        [void]$humanCaptureSessions.Add($matrix.humanReview.captureSessionId)
+        [void]$humanContrastHashes.Add($matrix.humanReview.contrastArtifactSha256.ToUpperInvariant())
+        [void]$humanLifecycleHashes.Add($matrix.humanReview.lifecycleArtifactSha256.ToUpperInvariant())
     }
     elseif ($matrix.status -notin @('MachineChecksPassedHumanReviewRequired','Approved')) {
         throw "Visual matrix is not ready for review: $($matrixPath.FullName)"
@@ -202,6 +209,10 @@ if (-not [DateTime]::TryParse($contrast.capturedUtc,[ref]$contrastTime) -or $con
 if ($contrast.captureSessionId -ne $captureSessionId -or $contrast.installerSha256 -ne $installerHash -or $contrast.applicationSha256 -ne $applicationHash) { throw 'Contrast evidence does not belong to the frozen candidate/session.' }
 $contrastSource = Resolve-EvidenceFile $contrastDirectory $contrast.source.relativePath
 Assert-FileHash $contrastSource $contrast.source.sha256
+$repositoryRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$canonicalThemeSource = (Resolve-Path (Join-Path $repositoryRoot 'src\ExcelDiffTracker.App\Services\ThemeManager.cs')).Path
+$canonicalThemeSourceHash = Get-AcceptanceFileSha256 $canonicalThemeSource
+if ($canonicalThemeSourceHash -ne $contrast.source.sha256.ToUpperInvariant() -or (Get-AcceptanceFileSha256 $contrastSource) -ne $canonicalThemeSourceHash) { throw 'Captured palette source bytes do not match the canonical ThemeManager.cs in this acceptance checkout.' }
 $sourceContent = [System.IO.File]::ReadAllText($contrastSource)
 $parsedPalettes = [ordered]@{ Light = Get-DeterministicPalette $sourceContent 'Light'; Dark = Get-DeterministicPalette $sourceContent 'Dark' }
 $contract = @(
@@ -283,7 +294,19 @@ $actualLifecycleFiles = @(Get-ChildItem $lifecycleDirectory -File)
 if ($actualLifecycleFiles.Count -ne $lifecycleFiles.Count) { throw 'Lifecycle evidence contains missing or unreviewed files.' }
 foreach ($file in $actualLifecycleFiles) { if (-not $lifecycleFiles.Contains($file.FullName)) { throw "Unreferenced lifecycle evidence file: $($file.FullName)" } }
 
-if ($RequireHumanApproval -and ($humanReviewers.Count -ne 1 -or $humanReviewTimes.Count -ne 1)) { throw 'All matrices must carry the same independent reviewer identity and one approval timestamp from the bundle approval operation.' }
+if ($RequireHumanApproval) {
+    if ($humanReviewers.Count -ne 1 -or $humanReviewTimes.Count -ne 1 -or $humanCaptureSessions.Count -ne 1 -or $humanContrastHashes.Count -ne 1 -or $humanLifecycleHashes.Count -ne 1) { throw 'All matrices must carry one reviewer, approval time, capture session, and exact contrast/lifecycle artifact binding from the bundle approval operation.' }
+    if (@($humanCaptureSessions)[0] -ne $captureSessionId -or @($humanContrastHashes)[0] -ne (Get-AcceptanceFileSha256 $contrastPath) -or @($humanLifecycleHashes)[0] -ne (Get-AcceptanceFileSha256 $lifecyclePath)) { throw 'Human visual approval was invalidated by a changed session, contrast artifact, or lifecycle artifact.' }
+    $approvalTime = ([DateTime](@($humanReviewTimes)[0])).ToUniversalTime()
+    $latestReviewableCapture = $contrastTime.ToUniversalTime()
+    $lifecycleArtifactTime = ([DateTime]$lifecycle.capturedUtc).ToUniversalTime()
+    if ($lifecycleArtifactTime -gt $latestReviewableCapture) { $latestReviewableCapture = $lifecycleArtifactTime }
+    foreach ($state in @($lifecycle.states)) {
+        $stateCaptureTime = ([DateTime]$state.capturedUtc).ToUniversalTime()
+        if ($stateCaptureTime -gt $latestReviewableCapture) { $latestReviewableCapture = $stateCaptureTime }
+    }
+    if ($approvalTime -lt $latestReviewableCapture) { throw 'Human visual approval predates contrast or lifecycle evidence and is invalid.' }
+}
 
 $requiredScales = @(100,125,150,200)
 $actualScales = @($matrices | ForEach-Object { [int]$_.actualEnvironment.scalePercent } | Select-Object -Unique)
