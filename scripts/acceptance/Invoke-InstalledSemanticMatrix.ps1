@@ -6,6 +6,7 @@ param(
     [Parameter(Mandatory)] [string] $ProbePath,
     [Parameter(Mandatory)] [string] $XlsmFixture,
     [Parameter(Mandatory)] [string] $EvidenceDirectory,
+    [Parameter(Mandatory)] [ValidatePattern('^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$')] [string] $OuterRunEvidenceId,
     [string] $ApplicationPath = (Join-Path $env:LOCALAPPDATA 'Programs\Excel Diff Tracker\ExcelDiffTracker.exe'),
     [string] $DatabasePath = (Join-Path $env:LOCALAPPDATA 'Excel Diff Tracker\history.db'),
     [switch] $ConfirmInstalledCandidate
@@ -532,9 +533,10 @@ finally {
     }
     $finishedUtc = [DateTime]::UtcNow
     $result = [ordered]@{
-        schemaVersion = 1
+        schemaVersion = 2
         gate = 'installed-real-excel-semantic-matrix'
         evidenceId = $evidenceId
+        outerRunEvidenceId = $OuterRunEvidenceId.ToLowerInvariant()
         status = if (-not $failed -and $phases.Count -eq 26 -and @($assertions | Where-Object { -not $_.passed }).Count -eq 0) { 'Passed' } else { 'Failed' }
         startedUtc = $startedUtc.ToString('O')
         finishedUtc = $finishedUtc.ToString('O')

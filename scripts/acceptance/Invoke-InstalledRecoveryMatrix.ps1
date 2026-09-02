@@ -5,6 +5,7 @@ param(
     [Parameter(Mandatory)] [ValidatePattern('^[A-Fa-f0-9]{64}$')] [string] $ExpectedApplicationSha256,
     [Parameter(Mandatory)] [string] $ProbePath,
     [Parameter(Mandatory)] [string] $EvidenceDirectory,
+    [Parameter(Mandatory)] [ValidatePattern('^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$')] [string] $OuterRunEvidenceId,
     [string] $ApplicationPath = (Join-Path $env:LOCALAPPDATA 'Programs\Excel Diff Tracker\ExcelDiffTracker.exe'),
     [string] $DatabasePath = (Join-Path $env:LOCALAPPDATA 'Excel Diff Tracker\history.db'),
     [string] $PasswordProtectedFixture,
@@ -672,8 +673,9 @@ finally {
     $finishedUtc = [DateTime]::UtcNow
     $allPassed = ($null -eq $fatalFailure -and $scenarios.Count -eq 11 -and @($scenarios | Where-Object { -not $_.passed }).Count -eq 0)
     $result = [pscustomobject]@{
-        schemaVersion = 1
+        schemaVersion = 2
         evidenceId = $evidenceId
+        outerRunEvidenceId = $OuterRunEvidenceId.ToLowerInvariant()
         startedUtc = $startedUtc.ToString('O')
         finishedUtc = $finishedUtc.ToString('O')
         durationSeconds = [math]::Round(($finishedUtc - $startedUtc).TotalSeconds,3)

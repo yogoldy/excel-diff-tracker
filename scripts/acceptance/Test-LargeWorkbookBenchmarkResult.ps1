@@ -2,7 +2,8 @@
 param(
     [Parameter(Mandatory)] [string] $ResultPath,
     [Parameter(Mandatory)] [string] $InstallerPath,
-    [Parameter(Mandatory)] [ValidatePattern('^[A-Fa-f0-9]{64}$')] [string] $ExpectedApplicationSha256
+    [Parameter(Mandatory)] [ValidatePattern('^[A-Fa-f0-9]{64}$')] [string] $ExpectedApplicationSha256,
+    [Parameter(Mandatory)] [ValidatePattern('^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$')] [string] $ExpectedOuterRunEvidenceId
 )
 
 Set-StrictMode -Version Latest
@@ -42,9 +43,14 @@ function Get-UiaNames {
     foreach ($child in @($Node.children)) { Get-UiaNames $child }
 }
 
-Require-Condition ($result.schemaVersion -eq 1) 'schemaVersion must be 1'
+Require-Condition ($result.schemaVersion -eq 2) 'schemaVersion must be 2'
+Require-Condition ($result.evidenceId -match '^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$') 'evidence identity is missing or malformed'
+Require-Condition ($result.outerRunEvidenceId -eq $ExpectedOuterRunEvidenceId.ToLowerInvariant()) 'outer run evidence identity differs'
 Require-Condition ($result.gate -eq 'large-workbook-500k') 'gate must be large-workbook-500k'
 Require-Condition ($result.status -eq 'Passed') 'status must be Passed'
+$resultStartedUtc = [DateTime]::Parse([string]$result.startedUtc).ToUniversalTime()
+$resultFinishedUtc = [DateTime]::Parse([string]$result.finishedUtc).ToUniversalTime()
+Require-Condition ($resultFinishedUtc -gt $resultStartedUtc) 'result timestamps are invalid'
 Require-Condition ($result.candidate.installerSha256.ToUpperInvariant() -eq $installerHash) 'installer SHA-256 does not match the exact candidate'
 Require-Condition ($result.candidate.expectedInstallerSha256.ToUpperInvariant() -eq $installerHash) 'frozen installer SHA-256 does not match the exact candidate'
 Require-Condition ($result.candidate.applicationSha256.ToUpperInvariant() -eq $expectedApplicationHash) 'installed executable SHA-256 does not match the frozen candidate'
@@ -72,6 +78,8 @@ Require-EvidenceFile $result.telemetry.monitorLog
 $telemetry = @(Get-Content $telemetryPath | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_ | ConvertFrom-Json })
 Require-Condition ($telemetry.Count -eq $result.telemetry.sampleCount) 'telemetry sample count differs from the raw JSONL'
 Require-Condition ($telemetry.Count -ge 2) 'raw telemetry must contain at least two samples'
+Require-Condition ([DateTime]::Parse([string]$telemetry[0].startedUtc).ToUniversalTime() -ge $resultStartedUtc) 'telemetry starts before the benchmark'
+Require-Condition ([DateTime]::Parse([string]$telemetry[-1].startedUtc).ToUniversalTime() -le $resultFinishedUtc) 'telemetry finishes after the benchmark'
 $monitorStartedUtc = [DateTime]::Parse($result.telemetry.monitorStartedUtc).ToUniversalTime()
 $monitorStoppedUtc = [DateTime]::Parse($result.telemetry.monitorStoppedUtc).ToUniversalTime()
 Require-Condition ($monitorStoppedUtc -gt $monitorStartedUtc) 'telemetry monitor timestamps are invalid'

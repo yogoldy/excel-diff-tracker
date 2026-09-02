@@ -4,7 +4,8 @@ param(
     [Parameter(Mandatory)] [string] $InstallerPath,
     [Parameter(Mandatory)] [ValidatePattern('^[A-Fa-f0-9]{64}$')] [string] $ExpectedApplicationSha256,
     [Parameter(Mandatory)] [string] $ProbePath,
-    [Parameter(Mandatory)] [string] $XlsmFixture
+    [Parameter(Mandatory)] [string] $XlsmFixture,
+    [Parameter(Mandatory)] [ValidatePattern('^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$')] [string] $ExpectedOuterRunEvidenceId
 )
 
 Set-StrictMode -Version Latest
@@ -274,10 +275,11 @@ function Test-FormatSemanticMatrix {
     }
 }
 
-Require-Condition ($result.schemaVersion -eq 1) 'schemaVersion must be 1'
+Require-Condition ($result.schemaVersion -eq 2) 'schemaVersion must be 2'
 Require-Condition ($result.gate -eq 'installed-real-excel-semantic-matrix') 'gate identity is wrong'
 Require-Condition ($result.status -eq 'Passed') 'status must be Passed'
 Require-Condition ($result.evidenceId -match '^[0-9a-fA-F-]{36}$') 'evidenceId is missing or malformed'
+Require-Condition ($result.outerRunEvidenceId -eq $ExpectedOuterRunEvidenceId.ToLowerInvariant()) 'outer run evidence identity differs'
 $startedUtc = [DateTime]::Parse($result.startedUtc).ToUniversalTime()
 $finishedUtc = [DateTime]::Parse($result.finishedUtc).ToUniversalTime()
 Require-Condition ($finishedUtc -gt $startedUtc) 'run timestamps are invalid'

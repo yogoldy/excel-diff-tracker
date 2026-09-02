@@ -2,7 +2,8 @@
 param(
     [Parameter(Mandatory)] [string] $ResultPath,
     [Parameter(Mandatory)] [string] $InstallerPath,
-    [Parameter(Mandatory)] [ValidatePattern('^[A-Fa-f0-9]{64}$')] [string] $ExpectedApplicationSha256
+    [Parameter(Mandatory)] [ValidatePattern('^[A-Fa-f0-9]{64}$')] [string] $ExpectedApplicationSha256,
+    [Parameter(Mandatory)] [ValidatePattern('^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$')] [string] $ExpectedOuterRunEvidenceId
 )
 
 Set-StrictMode -Version Latest
@@ -45,9 +46,14 @@ function Get-ZipEntrySha256 {
     finally { $archive.Dispose() }
 }
 
-Require-Condition ($result.schemaVersion -eq 1) 'schemaVersion must be 1'
+Require-Condition ($result.schemaVersion -eq 2) 'schemaVersion must be 2'
+Require-Condition ($result.evidenceId -match '^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$') 'evidence identity is missing or malformed'
+Require-Condition ($result.outerRunEvidenceId -eq $ExpectedOuterRunEvidenceId.ToLowerInvariant()) 'outer run evidence identity differs'
 Require-Condition ($result.gate -eq 'real-excel-ten-minute-soak') 'gate identity is wrong'
 Require-Condition ($result.status -eq 'Passed') 'status must be Passed'
+$resultStartedUtc = [DateTime]::Parse([string]$result.startedUtc).ToUniversalTime()
+$resultFinishedUtc = [DateTime]::Parse([string]$result.finishedUtc).ToUniversalTime()
+Require-Condition ($resultFinishedUtc -gt $resultStartedUtc -and $result.durationSeconds -gt 0) 'result timestamps are invalid'
 Require-Condition ($result.saveCount -eq 20) 'exactly 20 saves are required'
 Require-Condition ($result.saveIntervalSeconds -ge 30) 'save interval must be at least 30 seconds'
 Require-Condition ($result.monotonicDurationSeconds -ge 600) 'monotonic soak duration must be at least ten minutes'
@@ -88,6 +94,15 @@ for ($index = 0; $index -lt $saves.Count; $index++) {
     Require-Condition ($save.monotonicStartSeconds -ge (($index * $result.saveIntervalSeconds) - 0.25)) "save $($index + 1) started before its monotonic schedule"
     Require-Condition ($save.sha256 -match '^[A-F0-9]{64}$') "save $($index + 1) hash is malformed"
     Require-Condition ($save.captureMilliseconds -ge 0 -and $save.captureMilliseconds -le 20000) "save $($index + 1) has an invalid capture duration"
+    $scheduledUtc = [DateTime]::Parse([string]$save.scheduledUtc).ToUniversalTime()
+    $saveStartedUtc = [DateTime]::Parse([string]$save.saveStartedUtc).ToUniversalTime()
+    $ctrlSaveUtc = [DateTime]::Parse([string]$save.ctrlSaveUtc).ToUniversalTime()
+    $capturedUtc = [DateTime]::Parse([string]$save.capturedUtc).ToUniversalTime()
+    Require-Condition ($scheduledUtc -ge $resultStartedUtc -and $saveStartedUtc -ge $scheduledUtc.AddSeconds(-1) -and $ctrlSaveUtc -ge $saveStartedUtc -and $capturedUtc -ge $ctrlSaveUtc -and $capturedUtc -le $resultFinishedUtc) "save $($index + 1) timestamps are outside the soak or out of order"
+    if ($index -gt 0) {
+        $previousCapturedUtc = [DateTime]::Parse([string]$saves[$index - 1].capturedUtc).ToUniversalTime()
+        Require-Condition ($saveStartedUtc -ge $previousCapturedUtc) "save $($index + 1) overlaps the previous save"
+    }
     $probePath = Require-EvidenceFile $save.probe
     $probe = Get-Content $probePath -Raw | ConvertFrom-Json
     Require-Condition $probe.passed "probe failed for save $($index + 1)"

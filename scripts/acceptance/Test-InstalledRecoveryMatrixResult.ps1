@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory)] [string] $ResultPath,
     [Parameter(Mandatory)] [string] $InstallerPath,
     [Parameter(Mandatory)] [ValidatePattern('^[A-Fa-f0-9]{64}$')] [string] $ExpectedApplicationSha256,
-    [Parameter(Mandatory)] [string] $ProbePath
+    [Parameter(Mandatory)] [string] $ProbePath,
+    [Parameter(Mandatory)] [ValidatePattern('^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$')] [string] $ExpectedOuterRunEvidenceId
 )
 
 Set-StrictMode -Version Latest
@@ -96,7 +97,9 @@ function Require-State {
     }
 }
 
-Require-Condition ($result.schemaVersion -eq 1) 'schema version must be 1'
+Require-Condition ($result.schemaVersion -eq 2) 'schema version must be 2'
+Require-Condition ($result.evidenceId -match '^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$') 'evidence identity is missing or malformed'
+Require-Condition ($result.outerRunEvidenceId -eq $ExpectedOuterRunEvidenceId.ToLowerInvariant()) 'outer run evidence identity differs'
 Require-Condition ($result.success) 'runner did not pass'
 Require-Condition ([string]::IsNullOrWhiteSpace([string]$result.failure)) 'runner retained a failure'
 Require-Condition ($result.confirmation.disposableCleanVm) 'disposable clean VM confirmation is absent'
@@ -113,6 +116,9 @@ Require-Condition ($result.thresholds.shortLockSeconds -ge 5 -and $result.thresh
 Require-Condition ($result.thresholds.failureExposureSeconds -ge 65) 'failure exposure is shorter than the stable-copy timeout'
 Require-Condition ($result.thresholds.largeWorkbookRows -ge 5000) 'large workbook fixture is too small'
 Require-Condition ($result.thresholds.largeWorkbookColumns -eq 20 -and $result.thresholds.largeWorkbookCells -eq ($result.thresholds.largeWorkbookRows * 20)) 'large workbook dimensions differ'
+$runStarted = [DateTime]::Parse([string]$result.startedUtc).ToUniversalTime()
+$runFinished = [DateTime]::Parse([string]$result.finishedUtc).ToUniversalTime()
+Require-Condition ($runFinished -gt $runStarted -and $result.durationSeconds -gt 0) 'run timestamps are invalid'
 
 $requiredIds = @(
     'compatible-exclusive-lock-recovery','atomic-replacement','save-as-path-behavior',
@@ -122,12 +128,26 @@ $requiredIds = @(
 $actualIds = @($result.scenarios | ForEach-Object { [string]$_.id })
 Require-Condition ($actualIds.Count -eq $requiredIds.Count) 'the matrix must contain exactly eleven scenarios'
 Require-Condition (@(Compare-Object $requiredIds $actualIds).Count -eq 0) 'the required scenario set differs'
+for ($index = 0; $index -lt $requiredIds.Count; $index++) {
+    Require-Condition ($actualIds[$index] -eq $requiredIds[$index]) "scenario index $index is reordered"
+}
 
+$previousScenarioFinished = $runStarted
 foreach ($scenario in @($result.scenarios)) {
     Require-Condition ($scenario.passed) "scenario '$($scenario.id)' did not pass"
     Require-Condition ([string]::IsNullOrWhiteSpace([string]$scenario.failure)) "scenario '$($scenario.id)' retained a failure"
     Require-Condition (@($scenario.phases).Count -ge 2) "scenario '$($scenario.id)' has too few phases"
-    foreach ($phase in @($scenario.phases)) { Validate-PhaseEvidence -Scenario $scenario -Phase $phase }
+    $scenarioStarted = [DateTime]::Parse([string]$scenario.startedUtc).ToUniversalTime()
+    $scenarioFinished = [DateTime]::Parse([string]$scenario.finishedUtc).ToUniversalTime()
+    Require-Condition ($scenarioStarted -ge $previousScenarioFinished -and $scenarioFinished -gt $scenarioStarted -and $scenarioFinished -le $runFinished) "scenario '$($scenario.id)' timestamps are outside the run or reordered"
+    $previousObserved = $scenarioStarted
+    foreach ($phase in @($scenario.phases)) {
+        $observed = [DateTime]::Parse([string]$phase.observedUtc).ToUniversalTime()
+        Require-Condition ($observed -ge $previousObserved) "scenario '$($scenario.id)' phase '$($phase.name)' is reordered"
+        Validate-PhaseEvidence -Scenario $scenario -Phase $phase
+        $previousObserved = $observed
+    }
+    $previousScenarioFinished = $scenarioFinished
     $null = Resolve-EvidenceFile $scenario.uiEvidence.screenshot
     $null = Resolve-EvidenceFile $scenario.uiEvidence.tree
 }
@@ -149,6 +169,9 @@ foreach ($scenario in @($result.scenarios)) {
     $actualPhases = @($scenario.phases | ForEach-Object { [string]$_.name })
     $wantedPhases = @($expectedPhases[$scenario.id])
     Require-Condition ($actualPhases.Count -eq $wantedPhases.Count -and @(Compare-Object $wantedPhases $actualPhases).Count -eq 0) "scenario '$($scenario.id)' phase set differs"
+    for ($index = 0; $index -lt $wantedPhases.Count; $index++) {
+        Require-Condition ($actualPhases[$index] -eq $wantedPhases[$index]) "scenario '$($scenario.id)' phase index $index is reordered"
+    }
 }
 
 $s = Get-Scenario 'compatible-exclusive-lock-recovery'
@@ -232,8 +255,4 @@ Require-Condition ((Resolve-EvidenceFile $provenance.detail.fixture) -ne $null) 
 Require-Condition ($provenance.detail.fixture.sha256 -eq $provenance.detail.sha256) 'encrypted fixture provenance hash differs'
 
 $null = Resolve-EvidenceFile $result.transcript
-$started = [DateTime]::Parse($result.startedUtc).ToUniversalTime()
-$finished = [DateTime]::Parse($result.finishedUtc).ToUniversalTime()
-Require-Condition ($finished -gt $started -and $result.durationSeconds -gt 0) 'run timestamps are invalid'
-
 Write-Output "INSTALLED_RECOVERY_MATRIX_VALID|result=$path|evidenceId=$($result.evidenceId)"

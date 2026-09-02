@@ -5,6 +5,7 @@ param(
     [Parameter(Mandatory)] [ValidatePattern('^[A-Fa-f0-9]{64}$')] [string] $ExpectedApplicationSha256,
     [Parameter(Mandatory)] [string] $ProbePath,
     [Parameter(Mandatory)] [string] $EvidenceDirectory,
+    [Parameter(Mandatory)] [ValidatePattern('^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$')] [string] $OuterRunEvidenceId,
     [string] $ApplicationPath = (Join-Path $env:LOCALAPPDATA 'Programs\Excel Diff Tracker\ExcelDiffTracker.exe'),
     [string] $DatabasePath = (Join-Path $env:LOCALAPPDATA 'Excel Diff Tracker\history.db'),
     [switch] $ConfirmInstalledCandidate
@@ -49,6 +50,7 @@ $monitorStopPath = Join-Path $telemetryDirectory 'large-workbook-monitor.stop'
 $monitorLogPath = Join-Path $logDirectory 'large-workbook-monitor.txt'
 $fullExportPath = Join-Path $reportDirectory 'large-workbook-version-000004-full.md'
 $startedUtc = [DateTime]::UtcNow
+$evidenceId = [Guid]::NewGuid().ToString('D')
 
 if (Test-Path $evidence) { throw "Benchmark evidence directory already exists; use a fresh path: $evidence" }
 New-Item -ItemType Directory -Path $evidence, $fixtureDirectory, $probeDirectory, $reportDirectory, $screenshotDirectory, $uiaDirectory, $telemetryDirectory, $logDirectory -Force | Out-Null
@@ -601,7 +603,9 @@ finally {
     $applicationHashForResult = if (Test-Path $application -PathType Leaf) { Get-AcceptanceFileSha256 -Path $application } else { $null }
     $status = if (-not $failed -and @($assertions | Where-Object { -not $_.passed }).Count -eq 0 -and $phases.Count -eq 5) { 'Passed' } else { 'Failed' }
     $result = [ordered]@{
-        schemaVersion = 1
+        schemaVersion = 2
+        evidenceId = $evidenceId
+        outerRunEvidenceId = $OuterRunEvidenceId.ToLowerInvariant()
         gate = 'large-workbook-500k'
         status = $status
         startedUtc = $startedUtc.ToString('O')

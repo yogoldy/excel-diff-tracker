@@ -7,6 +7,7 @@ param(
     [Parameter(Mandatory)] [string] $XlsxFixture,
     [Parameter(Mandatory)] [string] $XlsmFixture,
     [Parameter(Mandatory)] [string] $EvidenceDirectory,
+    [Parameter(Mandatory)] [ValidatePattern('^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$')] [string] $OuterRunEvidenceId,
     [string] $ApplicationPath = (Join-Path $env:LOCALAPPDATA 'Programs\Excel Diff Tracker\ExcelDiffTracker.exe'),
     [string] $DatabasePath = (Join-Path $env:LOCALAPPDATA 'Excel Diff Tracker\history.db'),
     [ValidateSet(20)] [int] $SaveCount = 20,
@@ -53,6 +54,7 @@ Copy-Item $sourceXlsm $xlsm -Force
 Import-Module (Join-Path $PSScriptRoot 'UiAutomation.psm1') -Force
 
 $startedUtc = [DateTime]::UtcNow
+$evidenceId = [Guid]::NewGuid().ToString('D')
 $assertions = [System.Collections.Generic.List[object]]::new()
 $saves = [System.Collections.Generic.List[object]]::new()
 $failed = $false
@@ -335,7 +337,9 @@ finally {
 
     $finishedUtc = [DateTime]::UtcNow
     $result = [ordered]@{
-        schemaVersion = 1
+        schemaVersion = 2
+        evidenceId = $evidenceId
+        outerRunEvidenceId = $OuterRunEvidenceId.ToLowerInvariant()
         gate = 'real-excel-ten-minute-soak'
         status = if (-not $failed -and $saves.Count -eq $SaveCount -and @($assertions | Where-Object { -not $_.passed }).Count -eq 0) { 'Passed' } else { 'Failed' }
         startedUtc = $startedUtc.ToString('O')

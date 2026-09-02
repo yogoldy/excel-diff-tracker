@@ -8,6 +8,7 @@ param(
     [Parameter(Mandatory)] [ValidatePattern('^[A-Fa-f0-9]{64}$')] [string] $ExpectedPriorApplicationSha256,
     [Parameter(Mandatory)] [ValidatePattern('^\d+\.\d+\.\d+$')] [string] $PriorVersion,
     [Parameter(Mandatory)] [ValidatePattern('^\d+\.\d+\.\d+$')] [string] $CandidateVersion,
+    [Parameter(Mandatory)] [datetimeoffset] $AcceptanceCutoffUtc,
     [ValidateRange(2, 10)] [int] $RequiredRunCount = 2
 )
 
@@ -26,6 +27,16 @@ $semanticMatrixValidator = (Resolve-Path (Join-Path $PSScriptRoot 'Test-Installe
 $visualMatrixValidator = (Resolve-Path (Join-Path $PSScriptRoot 'Test-VisualMatrixBundle.ps1')).Path
 $recoveryMatrixValidator = (Resolve-Path (Join-Path $PSScriptRoot 'Test-InstalledRecoveryMatrixResult.ps1')).Path
 $lifecycleUpgradeValidator = (Resolve-Path (Join-Path $PSScriptRoot 'Test-InstalledLifecycleUpgradeResult.ps1')).Path
+$validationStartedUtc = [DateTime]::UtcNow
+$guidPattern = '^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$'
+
+if ($AcceptanceCutoffUtc.Offset -ne [TimeSpan]::Zero) {
+    throw 'AcceptanceCutoffUtc must include an explicit zero UTC offset.'
+}
+$acceptanceCutoffDateTimeUtc = $AcceptanceCutoffUtc.UtcDateTime
+if ($acceptanceCutoffDateTimeUtc -gt $validationStartedUtc -or $acceptanceCutoffDateTimeUtc -lt $validationStartedUtc.AddDays(-30)) {
+    throw 'AcceptanceCutoffUtc must be no later than validation start and no more than 30 days old.'
+}
 
 if ([version]$CandidateVersion -le [version]$PriorVersion) {
     throw "CandidateVersion must be newer than PriorVersion; got $PriorVersion -> $CandidateVersion."
@@ -49,6 +60,32 @@ function Test-ChecksumManifest {
     $files = @(Get-ChildItem $RunDirectory -File -Recurse | Where-Object FullName -ne $manifestPath)
     if ($seen.Count -ne $files.Count) {
         throw "Evidence manifest describes $($seen.Count) files, but $($files.Count) files exist: $RunDirectory"
+    }
+    Get-AcceptanceFileSha256 -Path $manifestPath
+}
+
+function Get-InstalledSubgateIdentity {
+    param(
+        [string] $ResultPath,
+        [string] $ExpectedOuterRunEvidenceId,
+        [datetime] $OuterStartedUtc,
+        [datetime] $OuterFinishedUtc,
+        [string] $GateName
+    )
+    $result = Get-Content -LiteralPath $ResultPath -Raw | ConvertFrom-Json
+    if ([string]$result.evidenceId -notmatch $guidPattern) { throw "$GateName evidence ID is missing or malformed: $ResultPath" }
+    if ([string]$result.outerRunEvidenceId -ne $ExpectedOuterRunEvidenceId) { throw "$GateName is not bound to its outer run evidence ID: $ResultPath" }
+    $started = [DateTime]::Parse([string]$result.startedUtc).ToUniversalTime()
+    $finished = [DateTime]::Parse([string]$result.finishedUtc).ToUniversalTime()
+    if ($finished -le $started -or $started -lt $OuterStartedUtc -or $finished -gt $OuterFinishedUtc) {
+        throw "$GateName timestamps are not contained by the outer acceptance run: $ResultPath"
+    }
+    [pscustomobject]@{
+        name = $GateName
+        evidenceId = ([string]$result.evidenceId).ToLowerInvariant()
+        outerRunEvidenceId = ([string]$result.outerRunEvidenceId).ToLowerInvariant()
+        startedUtc = $started
+        finishedUtc = $finished
     }
 }
 
@@ -220,9 +257,10 @@ if ($runs.Count -ne $RequiredRunCount) {
     throw "Expected exactly $RequiredRunCount black-box acceptance runs, found $($runs.Count)."
 }
 $runSummaries = foreach ($run in $runs | Sort-Object Name) {
-    Test-ChecksumManifest $run.FullName
+    $runManifestSha256 = Test-ChecksumManifest $run.FullName
     Test-RecoveryEvidence $run.FullName
     $summary = Get-Content (Join-Path $run.FullName 'acceptance.json') -Raw | ConvertFrom-Json
+    if ($summary.schemaVersion -ne 2) { throw "Acceptance run schema version must be 2: $($run.FullName)" }
     if ($summary.status -ne 'Passed') { throw "Acceptance run is not Passed: $($run.FullName)" }
     if ($summary.installerSha256.ToUpperInvariant() -ne $installerHash) {
         throw "Acceptance run used a different installer: $($run.FullName)"
@@ -233,12 +271,33 @@ $runSummaries = foreach ($run in $runs | Sort-Object Name) {
     if ($summary.installedApplicationSha256 -notmatch '^[A-Fa-f0-9]{64}$') {
         throw "Acceptance run is missing the frozen installed-executable hash: $($run.FullName)"
     }
+    if ([string]$summary.runEvidenceId -notmatch $guidPattern) {
+        throw "Acceptance run evidence ID is missing or malformed: $($run.FullName)"
+    }
+    if ($summary.version -ne $CandidateVersion) {
+        throw "Acceptance run version differs from the candidate version: $($run.FullName)"
+    }
+    $outerStartedUtc = [DateTime]::Parse([string]$summary.startedUtc).ToUniversalTime()
+    $outerFinishedUtc = [DateTime]::Parse([string]$summary.finishedUtc).ToUniversalTime()
+    if ($outerFinishedUtc -le $outerStartedUtc -or $outerStartedUtc -lt $acceptanceCutoffDateTimeUtc -or $outerFinishedUtc -gt $validationStartedUtc.AddMinutes(5)) {
+        throw "Acceptance run timestamps are invalid, stale, or future-dated: $($run.FullName)"
+    }
+    foreach ($assertion in @($summary.assertions)) {
+        $assertionUtc = [DateTime]::Parse([string]$assertion.utc).ToUniversalTime()
+        if ($assertionUtc -lt $outerStartedUtc -or $assertionUtc -gt $outerFinishedUtc) {
+            throw "Acceptance assertion timestamp is outside its outer run: $($run.FullName)"
+        }
+    }
     if ([string]::IsNullOrWhiteSpace($summary.vmSnapshotName) -or [string]::IsNullOrWhiteSpace($summary.vmSnapshotId)) {
         throw "Acceptance run is missing its clean VM snapshot identity: $($run.FullName)"
     }
     $environmentPath = Join-Path $run.FullName 'environment.json'
     if (-not (Test-Path $environmentPath -PathType Leaf)) { throw "Acceptance environment manifest is missing: $environmentPath" }
     $environment = Get-Content $environmentPath -Raw | ConvertFrom-Json
+    if ($environment.schemaVersion -ne 2 -or $environment.runId -ne $summary.runId -or [int]$environment.runNumber -ne [int]$summary.runNumber -or
+        $environment.runEvidenceId -ne $summary.runEvidenceId -or $environment.startedUtc -ne $summary.startedUtc) {
+        throw "Acceptance environment is not bound to the exact outer run identity: $environmentPath"
+    }
     Test-GoldenExcelEvidence $run.FullName
     Test-LifecycleEvidence $run.FullName $environment
     if ($environment.isAdministrator -ne $false) { throw "Acceptance run did not use a standard non-administrator account: $environmentPath" }
@@ -257,7 +316,9 @@ $runSummaries = foreach ($run in $runs | Sort-Object Name) {
     $null = & $largeBenchmarkValidator `
         -ResultPath $largeResults[0].FullName `
         -InstallerPath $installer `
-        -ExpectedApplicationSha256 $summary.installedApplicationSha256
+        -ExpectedApplicationSha256 $summary.installedApplicationSha256 `
+        -ExpectedOuterRunEvidenceId $summary.runEvidenceId
+    $largeIdentity = Get-InstalledSubgateIdentity -ResultPath $largeResults[0].FullName -ExpectedOuterRunEvidenceId $summary.runEvidenceId -OuterStartedUtc $outerStartedUtc -OuterFinishedUtc $outerFinishedUtc -GateName 'large-workbook benchmark'
 
     $soakResults = @(Get-ChildItem $run.FullName -Filter 'real-excel-soak.json' -File -Recurse)
     if ($soakResults.Count -ne 1) {
@@ -266,7 +327,9 @@ $runSummaries = foreach ($run in $runs | Sort-Object Name) {
     $null = & $soakValidator `
         -ResultPath $soakResults[0].FullName `
         -InstallerPath $installer `
-        -ExpectedApplicationSha256 $summary.installedApplicationSha256
+        -ExpectedApplicationSha256 $summary.installedApplicationSha256 `
+        -ExpectedOuterRunEvidenceId $summary.runEvidenceId
+    $soakIdentity = Get-InstalledSubgateIdentity -ResultPath $soakResults[0].FullName -ExpectedOuterRunEvidenceId $summary.runEvidenceId -OuterStartedUtc $outerStartedUtc -OuterFinishedUtc $outerFinishedUtc -GateName 'real-Excel soak'
 
     $semanticResults = @(Get-ChildItem $run.FullName -Filter 'installed-semantic-matrix.json' -File -Recurse)
     if ($semanticResults.Count -ne 1) {
@@ -277,7 +340,9 @@ $runSummaries = foreach ($run in $runs | Sort-Object Name) {
         -InstallerPath $installer `
         -ExpectedApplicationSha256 $summary.installedApplicationSha256 `
         -ProbePath $probe `
-        -XlsmFixture $xlsmFixture
+        -XlsmFixture $xlsmFixture `
+        -ExpectedOuterRunEvidenceId $summary.runEvidenceId
+    $semanticIdentity = Get-InstalledSubgateIdentity -ResultPath $semanticResults[0].FullName -ExpectedOuterRunEvidenceId $summary.runEvidenceId -OuterStartedUtc $outerStartedUtc -OuterFinishedUtc $outerFinishedUtc -GateName 'semantic matrix'
 
     $recoveryMatrixResults = @(Get-ChildItem $run.FullName -Filter 'installed-recovery-matrix.json' -File -Recurse)
     if ($recoveryMatrixResults.Count -ne 1) {
@@ -287,12 +352,25 @@ $runSummaries = foreach ($run in $runs | Sort-Object Name) {
         -ResultPath $recoveryMatrixResults[0].FullName `
         -InstallerPath $installer `
         -ExpectedApplicationSha256 $summary.installedApplicationSha256 `
-        -ProbePath $probe
+        -ProbePath $probe `
+        -ExpectedOuterRunEvidenceId $summary.runEvidenceId
+    $recoveryMatrixIdentity = Get-InstalledSubgateIdentity -ResultPath $recoveryMatrixResults[0].FullName -ExpectedOuterRunEvidenceId $summary.runEvidenceId -OuterStartedUtc $outerStartedUtc -OuterFinishedUtc $outerFinishedUtc -GateName 'recovery matrix'
+
+    if ($semanticIdentity.finishedUtc -gt $recoveryMatrixIdentity.startedUtc -or
+        $recoveryMatrixIdentity.finishedUtc -gt $largeIdentity.startedUtc -or
+        $largeIdentity.finishedUtc -gt $soakIdentity.startedUtc) {
+        throw "Installed subgate timestamps are reordered or overlapping: $($run.FullName)"
+    }
 
     [pscustomobject]@{
         runId = $summary.runId
         runNumber = [int]$summary.runNumber
+        runEvidenceId = ([string]$summary.runEvidenceId).ToLowerInvariant()
         path = $run.FullName
+        startedUtc = $outerStartedUtc
+        finishedUtc = $outerFinishedUtc
+        manifestSha256 = $runManifestSha256
+        subgateEvidenceIds = @($semanticIdentity.evidenceId, $recoveryMatrixIdentity.evidenceId, $largeIdentity.evidenceId, $soakIdentity.evidenceId)
         sourceCommit = $summary.sourceCommit
         vmSnapshotName = $summary.vmSnapshotName
         vmSnapshotId = $summary.vmSnapshotId
@@ -306,6 +384,16 @@ if (@($runSummaries.installedApplicationSha256 | Select-Object -Unique).Count -n
 }
 if (@($runSummaries.runId | Select-Object -Unique).Count -ne $RequiredRunCount) {
     throw 'Black-box acceptance run IDs are not unique.'
+}
+if (@($runSummaries.runEvidenceId | Select-Object -Unique).Count -ne $RequiredRunCount) {
+    throw 'Black-box acceptance outer run evidence IDs are not unique.'
+}
+if (@($runSummaries.manifestSha256 | Select-Object -Unique).Count -ne $RequiredRunCount) {
+    throw 'Black-box acceptance whole-run evidence manifests are identical.'
+}
+$allEvidenceIds = @($runSummaries | ForEach-Object { @($_.runEvidenceId) + @($_.subgateEvidenceIds) })
+if (@($allEvidenceIds | Select-Object -Unique).Count -ne ($RequiredRunCount * 5)) {
+    throw 'Outer and installed-subgate evidence IDs must be globally unique across acceptance runs.'
 }
 $requiredRunNumbers = @(1..$RequiredRunCount)
 if (@(Compare-Object $requiredRunNumbers @($runSummaries.runNumber)).Count -ne 0) {
@@ -391,11 +479,14 @@ if (@($attestations.reviewer | Select-Object -Unique).Count -ne $requiredAttesta
 }
 
 $approval = [ordered]@{
+    schemaVersion = 2
     status = 'Approved'
     installerSha256 = $installerHash
     installedApplicationSha256 = $runSummaries[0].installedApplicationSha256
     sourceCommit = $runSummaries[0].sourceCommit
     evidenceSha256 = $evidenceDigest
+    acceptanceCutoffUtc = $AcceptanceCutoffUtc.ToString('O')
+    validationStartedUtc = $validationStartedUtc.ToString('O')
     approvedUtc = [DateTime]::UtcNow.ToString('O')
     runs = $runSummaries
     lifecycleUpgrade = [ordered]@{

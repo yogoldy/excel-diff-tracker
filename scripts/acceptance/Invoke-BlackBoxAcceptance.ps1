@@ -38,6 +38,7 @@ $recoveryMatrixRunner = (Resolve-Path (Join-Path $PSScriptRoot 'Invoke-Installed
 $recoveryMatrixValidator = (Resolve-Path (Join-Path $PSScriptRoot 'Test-InstalledRecoveryMatrixResult.ps1')).Path
 $sourceCommit = (& git -C $repositoryRoot rev-parse HEAD 2>$null).Trim()
 $runStartedUtc = [DateTime]::UtcNow
+$runEvidenceId = [Guid]::NewGuid().ToString('D')
 $runId = "run-$RunNumber-$($runStartedUtc.ToString('yyyyMMddTHHmmssZ'))"
 if (-not $EvidenceRoot) {
     $EvidenceRoot = Join-Path $repositoryRoot "artifacts\acceptance\$Version\$runId"
@@ -648,8 +649,10 @@ function Write-EnvironmentManifest {
     $excelExecutable = if ($null -ne $script:excel) { Join-Path ([string]$script:excel.Path) 'EXCEL.EXE' } else { $excelPath }
     $appliedDpi = (Get-ItemProperty 'HKCU:\Control Panel\Desktop\WindowMetrics' -Name AppliedDPI -ErrorAction SilentlyContinue).AppliedDPI
     $manifest = [ordered]@{
+        schemaVersion = 2
         runId = $runId
         runNumber = $RunNumber
+        runEvidenceId = $runEvidenceId
         startedUtc = $runStartedUtc.ToString('O')
         vmSnapshotName = $VmSnapshotName
         vmSnapshotId = $VmSnapshotId
@@ -834,6 +837,7 @@ try {
             -ProbePath $probe `
             -XlsmFixture $sourceXlsm `
             -EvidenceDirectory $semanticEvidence `
+            -OuterRunEvidenceId $runEvidenceId `
             -ConfirmInstalledCandidate
         $semanticResult = Join-Path $semanticEvidence 'installed-semantic-matrix.json'
         $null = & $semanticMatrixValidator `
@@ -841,7 +845,8 @@ try {
             -InstallerPath $installer `
             -ExpectedApplicationSha256 $installedApplicationHash `
             -ProbePath $probe `
-            -XlsmFixture $sourceXlsm
+            -XlsmFixture $sourceXlsm `
+            -ExpectedOuterRunEvidenceId $runEvidenceId
     } 'semantic-matrix/installed-semantic-matrix.json'
 
     Invoke-Step 'installed watcher and recovery matrix' {
@@ -854,13 +859,15 @@ try {
             -ExpectedApplicationSha256 $installedApplicationHash `
             -ProbePath $probe `
             -EvidenceDirectory $recoveryMatrixEvidence `
+            -OuterRunEvidenceId $runEvidenceId `
             -ConfirmDisposableCleanVm
         $recoveryMatrixResult = Join-Path $recoveryMatrixEvidence 'installed-recovery-matrix.json'
         $null = & $recoveryMatrixValidator `
             -ResultPath $recoveryMatrixResult `
             -InstallerPath $installer `
             -ExpectedApplicationSha256 $installedApplicationHash `
-            -ProbePath $probe
+            -ProbePath $probe `
+            -ExpectedOuterRunEvidenceId $runEvidenceId
         $script:appProcess = Get-Process -Name 'ExcelDiffTracker' -ErrorAction Stop | Where-Object {
             try { [string]::Equals($_.Path, $application, [StringComparison]::OrdinalIgnoreCase) } catch { $false }
         } | Select-Object -First 1
@@ -876,12 +883,14 @@ try {
             -ExpectedApplicationSha256 $installedApplicationHash `
             -ProbePath $probe `
             -EvidenceDirectory $largeEvidence `
+            -OuterRunEvidenceId $runEvidenceId `
             -ConfirmInstalledCandidate
         $largeResult = Join-Path $largeEvidence 'large-workbook-benchmark.json'
         $null = & $largeBenchmarkValidator `
             -ResultPath $largeResult `
             -InstallerPath $installer `
-            -ExpectedApplicationSha256 $installedApplicationHash
+            -ExpectedApplicationSha256 $installedApplicationHash `
+            -ExpectedOuterRunEvidenceId $runEvidenceId
     } 'large-workbook/large-workbook-benchmark.json'
 
     Invoke-Step 'twenty-save real Excel soak over ten minutes' {
@@ -894,12 +903,14 @@ try {
             -XlsxFixture $sourceXlsx `
             -XlsmFixture $sourceXlsm `
             -EvidenceDirectory $soakEvidence `
+            -OuterRunEvidenceId $runEvidenceId `
             -ConfirmInstalledCandidate
         $soakResult = Join-Path $soakEvidence 'real-excel-soak.json'
         $null = & $soakValidator `
             -ResultPath $soakResult `
             -InstallerPath $installer `
-            -ExpectedApplicationSha256 $installedApplicationHash
+            -ExpectedApplicationSha256 $installedApplicationHash `
+            -ExpectedOuterRunEvidenceId $runEvidenceId
     } 'soak/real-excel-soak.json'
 }
 catch {
@@ -952,10 +963,12 @@ finally {
     }
 
     $summary = [ordered]@{
+        schemaVersion = 2
         status = if (-not $failed -and @($assertions | Where-Object { -not $_.passed }).Count -eq 0) { 'Passed' } else { 'Failed' }
         version = $Version
         runId = $runId
         runNumber = $RunNumber
+        runEvidenceId = $runEvidenceId
         startedUtc = $runStartedUtc.ToString('O')
         finishedUtc = [DateTime]::UtcNow.ToString('O')
         sourceCommit = $sourceCommit
