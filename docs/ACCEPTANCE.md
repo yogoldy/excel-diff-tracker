@@ -68,6 +68,56 @@ Required configurations include light, dark, system-light, system-dark, and Wind
 - Every action is keyboard reachable with visible focus and correct UI Automation name, role, state, and stable `AutomationId`.
 - Theme changes apply immediately and persist; Windows contrast/theme changes while running are reflected.
 
+`Capture-VisualMatrix.ps1` is phased because onboarding and a populated dashboard cannot truthfully exist at the same time in one clean profile. Use one new GUID as `-CaptureSessionId` for the entire candidate, and pass `-InstallerPath` plus the frozen installer and installed-application SHA-256 values on every invocation. The script hashes the installer path and the running installed executable instead of trusting their labels. It is append-only: it refuses a duplicate state, a different session/candidate, or a requested scale/contrast label that does not match Windows' measured state.
+
+The onboarding phase requires a real workbook whose absolute path is at least 80 characters. It captures all five steps, the empty and populated workbook step, both native pickers, accessible long-path text, UI Automation trees, geometry, roles/names/IDs, and a screenshot at every unique Tab stop. The main phase requires a populated workbook plus an existing warning and captures every page in Light, Dark, and System themes, the file/folder pickers, and the non-destructive side of the purge confirmation. Run the main phase at minimum, default, and resized window sizes. Arrange each transient tray-menu, toast, processing, warning, and error state and capture it immediately with the supplemental phase; `-UseDesktopRoot` is available for the tray menu.
+
+Do not infer display configuration from folder names. The capture records per-window DPI from Windows, derives scaling from that DPI, reads actual Windows app/system theme and high-contrast state, and reads the primary physical display mode. Collect the complete Light/Dark/System five-page main matrix at each measured 100%, 125%, 150%, and 200% scale; both measured Windows light and dark modes; a five-page System-theme matrix under a measured contrast theme; and physical 1280x720-class and 1920x1080-class modes. A mismatch fails before screenshots are accepted.
+
+A representative invocation is:
+
+```powershell
+$session = [Guid]::NewGuid().ToString()
+$common = @{
+  EvidenceRoot = '<visual-evidence>'
+  CaptureSessionId = $session
+  InstallerPath = '<exact-installer.exe>'
+  ExpectedInstallerSha256 = '<installer-sha256>'
+  ExpectedApplicationSha256 = '<installed-exe-sha256>'
+  ExpectedScalePercent = '100'
+  OperatorDisplayLabel = 'operator note only; not used as evidence'
+}
+scripts\acceptance\Capture-VisualMatrix.ps1 @common -CapturePhase Onboarding -WorkbookPath '<80-plus-character-fixture-path>'
+scripts\acceptance\Capture-VisualMatrix.ps1 @common -CapturePhase Main -ExpectedLongPath '<same-full-path>' -ExpectedWarningText '<visible-warning-text>'
+```
+
+Repeat the main phase after changing the real Windows display/theme state, update only `ExpectedScalePercent`, and use the same session/candidate identity. Use `-WindowSizeMode Minimum`, `Default`, and `Resized` across the set, and use `-WindowsContrastTheme` only while Windows actually reports a contrast theme. Supplemental calls use `-CapturePhase Supplemental -StateName <state>` after arranging the transient state; use `-UseDesktopRoot` for the open tray menu. Processing capture requires an exact visible product status of `Processing`, warning requires an exact `Warning` status, and error requires one recognized exact capture-error category/stage on the active History page; supply that exact value through `-ExpectedStateText`. Toast capture requires a visible named `StatusToast`; tray capture requires the three product-owned menu items; and long-path capture requires the accessible full path and HelpText. A state label or arbitrary product text is never accepted as evidence. Never reuse an evidence directory after a failed or partial candidate run.
+
+After all phases, run:
+
+```powershell
+scripts\acceptance\Test-VisualMatrixBundle.ps1 `
+  -EvidenceRoot <visual-evidence> `
+  -ExpectedInstallerSha256 <installer-sha256> `
+  -ExpectedApplicationSha256 <installed-exe-sha256>
+```
+
+This validator re-hashes every screenshot, UIA tree, focus manifest, and focus screenshot; requires all states/configurations; and fails on missing, overwritten, mixed-session, mislabeled, or machine-failed evidence. It never treats `Pending` as approval.
+
+The independent visual/accessibility reviewer must inspect every screenshot and focus sequence for WCAG contrast, clipping/overlap/off-screen content, path ellipsis/tooltips, and a clearly visible keyboard focus indicator. Approval is explicit and fail-closed:
+
+```powershell
+scripts\acceptance\Approve-VisualMatrixBundle.ps1 `
+  -EvidenceRoot <visual-evidence> `
+  -ExpectedInstallerSha256 <installer-sha256> `
+  -ExpectedApplicationSha256 <installed-exe-sha256> `
+  -Reviewer '<reviewer name>' `
+  -Notes '<what was inspected and any finding disposition>' `
+  -ApproveContrast -ApproveClippingAndOverlap -ApproveKeyboardAndFocus
+```
+
+Omitting any approval, reviewer identity, or substantive notes fails. The helper first validates the complete machine bundle, writes `Approved` only to that exact candidate/session, then validates it again with human approval required. Any later capture resets its matrix to pending and therefore invalidates aggregate release approval.
+
 ### Soak
 
 Perform at least 20 alternating real Excel saves across two workbooks over ten minutes. There must be zero missed stable hashes, duplicates, crashes, or workbooks stuck in Processing/Warning.
