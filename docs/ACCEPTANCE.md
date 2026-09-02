@@ -5,7 +5,9 @@ Excel Diff Tracker is approved for release only when the exact installer candida
 ## Fail-closed rules
 
 - Freeze the source commit and installer SHA-256 before acceptance. Any code, packaging, or installer change invalidates every earlier run.
+- The installer must contain `BUILD-IDENTITY.json` and `BUILD-SOURCE-SHA256SUMS.txt`. The latter must exactly match every tracked byte in the clean release checkout except the one generated WinGet installer-hash manifest. The embedded build-source commit must be an ancestor of the release commit, and that manifest must be their only changed path.
 - Run the critical path twice from named, clean Windows 11 ARM64 VM snapshots using a standard non-administrator account, real desktop Microsoft Excel (recording whether its executable is ARM64 or x64-under-emulation), normal `%LocalAppData%`, and no development .NET on `PATH`.
+- Generate a UTC cutoff immediately before the first run and pass the same explicit `Z`/`+00:00` value to aggregate validation and publishing. Every outer run, assertion, and installed subgate must fall within its linked fresh run; all outer/subgate GUIDs and whole-run manifests must be distinct.
 - Keep the first failure and its evidence. A rerun may diagnose a failure but cannot erase it from the candidate record.
 - A skipped, missing, flaky, or inconclusive mandatory assertion is a failure.
 - The installed `ExcelDiffTracker.exe` and its public UI are the system under test. Product assemblies and `ExcelDiffTracker.Smoke.exe` are not valid black-box substitutes.
@@ -27,7 +29,7 @@ Record the source commit/tag; installer and installed-executable hashes; VM snap
 5. With startup enabled, log off/on and require a quiet tray start plus a working dashboard.
 6. Verify in-place upgrade preserves synthetic history, then verify uninstall removes binaries, shortcuts, and startup registration while following the documented data-retention behavior.
 
-The release-level lifecycle requirement is a separate two-phase installed gate using a real prior public installer and a strictly newer candidate. Run [the installed lifecycle and in-place-upgrade procedure](INSTALLED_LIFECYCLE_UPGRADE.md), perform the required Windows logoff/sign-in outside the scripts, and retain exactly one validated `installed-lifecycle-upgrade.json` in the aggregate evidence tree. The aggregate validator independently binds it to the exact prior installer/application/version, candidate installer/application/version, and acceptance probe. The per-run tray/relaunch/background/repair checks remain useful supporting coverage but cannot replace this exact upgrade-and-new-logon proof.
+The release-level lifecycle requirement is a separate two-phase installed gate using the real prior public installer pinned in `packaging/release-baselines.json` and a strictly newer candidate. Run [the installed lifecycle and in-place-upgrade procedure](INSTALLED_LIFECYCLE_UPGRADE.md), perform the required Windows logoff/sign-in outside the scripts, and retain exactly one validated `installed-lifecycle-upgrade.json` in the aggregate evidence tree. The aggregate validator independently binds it to the policy-pinned prior installer/application/version, candidate installer/application/version, and acceptance probe. The per-run tray/relaunch/background/repair checks remain useful supporting coverage but cannot replace this exact upgrade-and-new-logon proof.
 
 ### Real Excel `.xlsx` and `.xlsm`
 
@@ -162,10 +164,30 @@ Each run is stored under `artifacts/acceptance/<version>/<run-id>/` and copied o
 
 ## Independent approval
 
-The candidate requires three independent attestations:
+The candidate requires three independent attestations. Each attestation must identify the exact build-source commit, release commit, source-manifest hash, installer, installed executable, and common evidence digest; include substantive notes and a valid review timestamp after all machine/visual evidence completed. `approval.json` records the SHA-256 of each attestation and their combined set so later byte replacement is detectable:
 
 1. A functional verifier who did not implement the candidate reruns the installed-app/Excel critical path from a reset snapshot.
 2. A visual/accessibility reviewer checks the complete screenshot/video matrix and machine geometry/contrast results.
 3. A release custodian verifies both clean runs, evidence hashes, installer identity, and no open P0-P2 findings.
 
-The builder cannot approve their own work. Release publishing must refuse to proceed unless the machine-readable acceptance summary is `Approved`, both clean critical-path runs are present, every evidence hash verifies, and all attestations name the same installer SHA-256.
+After all machine and visual evidence is complete, run the aggregate validator once without attestations. It intentionally stops after writing `EVIDENCE_SHA256SUMS.txt`; its own SHA-256 is the `evidenceSha256` each reviewer must inspect and record. Each file under `attestations/` uses this shape, with the appropriate exact role and distinct reviewer:
+
+```json
+{
+  "status": "Approved",
+  "reviewer": "Reviewer name",
+  "role": "Functional verifier",
+  "sourceCommit": "40-character build-source commit",
+  "releaseCommit": "40-character release commit",
+  "sourceManifestSha256": "64-character installed source-manifest hash",
+  "installerSha256": "64-character installer hash",
+  "installedApplicationSha256": "64-character installed executable hash",
+  "evidenceSha256": "SHA-256 of EVIDENCE_SHA256SUMS.txt",
+  "reviewedUtc": "YYYY-MM-DDTHH:MM:SSZ",
+  "notes": "Substantive description of the evidence personally reviewed."
+}
+```
+
+Rerun aggregate validation only after all three reviewers have completed their files. The visual attestation reviewer must exactly match the person recorded by the visual-bundle approval helper. The builder cannot approve their own work. Release publishing must refuse to proceed unless the machine-readable acceptance summary is `Approved`, both clean critical-path runs are present, every evidence hash verifies, all attestation bytes still match their approval hashes, and all attestations name the same candidate identities.
+
+These local hashes provide integrity and review traceability; they are not digital signatures and do not prove a human identity against a hostile user who can rewrite the entire local evidence tree. Reviewer independence is an operational control until signed attestations or an external immutable evidence service is introduced.

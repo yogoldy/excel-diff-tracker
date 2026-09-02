@@ -17,6 +17,38 @@ $smokeTool = Join-Path $artifacts 'smoke-tool'
 $branding = Join-Path $artifacts 'branding'
 $release = Join-Path $artifacts 'release'
 $icon = Join-Path $branding 'app-icon.ico'
+$wingetManifestRelative = "packaging/winget/yogoldy.ExcelDiffTracker/$Version/yogoldy.ExcelDiffTracker.installer.yaml"
+$wingetManifest = Join-Path $repositoryRoot $wingetManifestRelative.Replace('/', [System.IO.Path]::DirectorySeparatorChar)
+
+$sourceCommit = (& git -C $repositoryRoot rev-parse HEAD).Trim().ToLowerInvariant()
+if ($LASTEXITCODE -ne 0 -or $sourceCommit -notmatch '^[a-f0-9]{40}$') {
+    throw 'A frozen Git source commit is required before building a release.'
+}
+$dirtySource = @(& git -C $repositoryRoot status --porcelain --untracked-files=all)
+if ($LASTEXITCODE -ne 0 -or $dirtySource.Count -ne 0) {
+    throw 'The source tree must be clean before building a release candidate.'
+}
+if (-not (Test-Path $wingetManifest -PathType Leaf)) {
+    throw "The candidate WinGet manifest is missing: $wingetManifest"
+}
+
+function Get-SourceManifestContent {
+    $trackedFiles = @(& git -C $repositoryRoot ls-files)
+    if ($LASTEXITCODE -ne 0 -or $trackedFiles.Count -eq 0) { throw 'Could not enumerate tracked source files.' }
+    $includedFiles = @($trackedFiles | Where-Object { $_ -ne $wingetManifestRelative } | Sort-Object)
+    if ($includedFiles.Count -ne ($trackedFiles.Count - 1)) {
+        throw 'The generated WinGet hash manifest must be the one and only source-manifest exclusion.'
+    }
+    $lines = foreach ($relative in $includedFiles) {
+        $fullPath = Join-Path $repositoryRoot $relative.Replace('/', [System.IO.Path]::DirectorySeparatorChar)
+        if (-not (Test-Path $fullPath -PathType Leaf)) { throw "Tracked source file is missing: $relative" }
+        $hash = (Get-FileHash -LiteralPath $fullPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        "$hash  $relative"
+    }
+    [pscustomobject]@{ Text = (($lines -join "`n") + "`n"); FileCount = $includedFiles.Count }
+}
+
+$sourceManifest = Get-SourceManifestContent
 
 if (Test-Path $artifacts) {
     Remove-Item $artifacts -Recurse -Force
@@ -35,6 +67,25 @@ if ($LASTEXITCODE -ne 0) { throw 'Tests failed.' }
 $appProject = Join-Path $repositoryRoot 'src\ExcelDiffTracker.App\ExcelDiffTracker.App.csproj'
 dotnet publish $appProject -c $Configuration -r win-arm64 --self-contained true --no-restore -o $publish "-p:Version=$Version" "-p:ApplicationIcon=$icon"
 if ($LASTEXITCODE -ne 0) { throw 'ARM64 publish failed.' }
+
+$sourceManifestPath = Join-Path $publish 'BUILD-SOURCE-SHA256SUMS.txt'
+[System.IO.File]::WriteAllText($sourceManifestPath, $sourceManifest.Text, [System.Text.UTF8Encoding]::new($false))
+$sourceManifestHash = (Get-FileHash -LiteralPath $sourceManifestPath -Algorithm SHA256).Hash.ToUpperInvariant()
+$buildIdentity = [ordered]@{
+    schemaVersion = 1
+    product = 'Excel Diff Tracker'
+    version = $Version
+    sourceCommit = $sourceCommit
+    sourceManifest = 'BUILD-SOURCE-SHA256SUMS.txt'
+    sourceManifestSha256 = $sourceManifestHash
+    sourceFileCount = $sourceManifest.FileCount
+    excludedGeneratedPath = $wingetManifestRelative
+    createdUtc = [DateTime]::UtcNow.ToString('O')
+}
+[System.IO.File]::WriteAllText(
+    (Join-Path $publish 'BUILD-IDENTITY.json'),
+    ($buildIdentity | ConvertTo-Json -Depth 5),
+    [System.Text.UTF8Encoding]::new($false))
 
 $acceptanceProbeProject = Join-Path $repositoryRoot 'tools\ExcelDiffTracker.AcceptanceProbe\ExcelDiffTracker.AcceptanceProbe.csproj'
 dotnet publish $acceptanceProbeProject -c $Configuration -r win-arm64 --self-contained true --no-restore -o $acceptanceTools
@@ -112,7 +163,6 @@ if (-not $SkipInstaller) {
     Copy-Item $installer $release
 
     $installerHash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToUpperInvariant()
-    $wingetManifest = Join-Path $repositoryRoot "packaging\winget\yogoldy.ExcelDiffTracker\$Version\yogoldy.ExcelDiffTracker.installer.yaml"
     if (Test-Path $wingetManifest) {
         $manifestText = [System.IO.File]::ReadAllText($wingetManifest)
         $updatedManifest = [System.Text.RegularExpressions.Regex]::Replace(

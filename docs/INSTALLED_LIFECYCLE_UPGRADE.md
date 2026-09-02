@@ -11,7 +11,7 @@ The second script refuses the old logon. It requires a different token logon SID
 - Use a resettable disposable Windows VM, stock 64-bit Windows PowerShell 5.1 Desktop, and a standard non-administrator account. Do not use the original VM or a production Windows profile.
 - Install desktop Microsoft Excel. Both synthetic versions are made in a visible Excel window using keyboard navigation and `Ctrl+S`.
 - Begin with no Excel Diff Tracker process, install directory, local data directory, default report directory, shortcut, startup value, or uninstall registration.
-- Keep the prior installer, candidate installer, and separately built `ExcelDiffTracker.AcceptanceProbe.exe` on local VM paths. Freeze both installer hashes, both installed-executable hashes, the probe hash, and both versions before starting.
+- Keep the prior installer, candidate installer, and separately built `ExcelDiffTracker.AcceptanceProbe.exe` on local VM paths. Freeze both installer hashes, both installed-executable hashes, the probe hash, and both versions before starting. For candidate 0.1.2, `packaging/release-baselines.json` requires the actual public v0.1.1 GitHub asset (`491F37DA829C4A167B5C1C4CD1BD908503E6A31CFC4B75819B45F0C5426FEFF6`) and its installed executable (`D9901C2709C1759A96BFCFADA71C42018575CD6781C8FF717ADA6D76A255DAD8`); aggregate release approval rejects any substitute.
 - Use a fresh local evidence directory. A failed or partial directory is not reusable; reset the VM and start with a new directory.
 
 ## Phase 1: install, onboard, upgrade, and stop pending logoff
@@ -19,8 +19,8 @@ The second script refuses the old logon. It requires a different token logon SID
 ```powershell
 $common = @{
   PriorInstallerPath = 'C:\Candidate\ExcelDiffTracker-Setup-0.1.1-arm64.exe'
-  ExpectedPriorInstallerSha256 = '<prior-installer-sha256>'
-  ExpectedPriorApplicationSha256 = '<prior-installed-exe-sha256>'
+  ExpectedPriorInstallerSha256 = '491F37DA829C4A167B5C1C4CD1BD908503E6A31CFC4B75819B45F0C5426FEFF6'
+  ExpectedPriorApplicationSha256 = 'D9901C2709C1759A96BFCFADA71C42018575CD6781C8FF717ADA6D76A255DAD8'
   PriorVersion = '0.1.1'
   CandidateInstallerPath = 'C:\Candidate\ExcelDiffTracker-Setup-0.1.2-arm64.exe'
   ExpectedCandidateInstallerSha256 = '<candidate-installer-sha256>'

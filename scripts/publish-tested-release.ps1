@@ -17,6 +17,8 @@ param(
     [Parameter(Mandatory = $true)]
     [ValidatePattern('^\d+\.\d+\.\d+$')]
     [string]$PriorVersion,
+    [Parameter(Mandatory = $true)]
+    [datetimeoffset]$AcceptanceCutoffUtc,
     [switch]$Prerelease
 )
 
@@ -48,7 +50,8 @@ $null = & $acceptanceValidator `
     -PriorInstallerPath $PriorInstallerPath `
     -ExpectedPriorApplicationSha256 $ExpectedPriorApplicationSha256 `
     -PriorVersion $PriorVersion `
-    -CandidateVersion $Version
+    -CandidateVersion $Version `
+    -AcceptanceCutoffUtc $AcceptanceCutoffUtc
 $approvalPath = Join-Path $acceptanceDirectoryPath 'approval.json'
 if (-not (Test-Path $approvalPath)) {
     throw 'Acceptance approval is missing. Run scripts\acceptance\Test-AcceptanceEvidence.ps1 first.'
@@ -58,8 +61,8 @@ if ($approval.status -ne 'Approved' -or $approval.installerSha256.ToUpperInvaria
     throw 'Acceptance approval does not approve this exact installer.'
 }
 $headCommit = (& git -C $repositoryRoot rev-parse HEAD).Trim()
-if ($LASTEXITCODE -ne 0 -or $approval.sourceCommit -ne $headCommit) {
-    throw 'Acceptance approval does not name the source commit being published.'
+if ($LASTEXITCODE -ne 0 -or $approval.releaseCommit -ne $headCommit) {
+    throw 'Acceptance approval does not name the release commit being published.'
 }
 $checksumText = [System.IO.File]::ReadAllText($checksumFile)
 $manifestText = [System.IO.File]::ReadAllText($wingetManifest)
@@ -92,6 +95,12 @@ if ($checksumText -notmatch "(?im)^$($actualHash.ToLowerInvariant())\s+ExcelDiff
 }
 if ($manifestText -notmatch "(?im)^\s*InstallerSha256:\s*$actualHash\s*$") {
     throw 'The WinGet manifest hash does not match the installer being published.'
+}
+foreach ($attestation in @($approval.attestations)) {
+    $attestationPath = Join-Path (Join-Path $acceptanceDirectoryPath 'attestations') $attestation.file
+    if (-not (Test-Path $attestationPath -PathType Leaf)) { throw "Approved attestation is missing: $attestationPath" }
+    $attestationHash = (Get-FileHash -LiteralPath $attestationPath -Algorithm SHA256).Hash.ToUpperInvariant()
+    if ($attestationHash -ne $attestation.sha256.ToUpperInvariant()) { throw "Approved attestation bytes changed: $attestationPath" }
 }
 
 $dirty = & git -C $repositoryRoot status --porcelain

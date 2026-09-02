@@ -36,7 +36,9 @@ $semanticMatrixRunner = (Resolve-Path (Join-Path $PSScriptRoot 'Invoke-Installed
 $semanticMatrixValidator = (Resolve-Path (Join-Path $PSScriptRoot 'Test-InstalledSemanticMatrixResult.ps1')).Path
 $recoveryMatrixRunner = (Resolve-Path (Join-Path $PSScriptRoot 'Invoke-InstalledRecoveryMatrix.ps1')).Path
 $recoveryMatrixValidator = (Resolve-Path (Join-Path $PSScriptRoot 'Test-InstalledRecoveryMatrixResult.ps1')).Path
-$sourceCommit = (& git -C $repositoryRoot rev-parse HEAD 2>$null).Trim()
+$buildIdentityValidator = (Resolve-Path (Join-Path $PSScriptRoot 'Test-BuildIdentity.ps1')).Path
+$releaseCommit = (& git -C $repositoryRoot rev-parse HEAD 2>$null).Trim().ToLowerInvariant()
+$sourceCommit = $ExpectedSourceCommit.ToLowerInvariant()
 $runStartedUtc = [DateTime]::UtcNow
 $runEvidenceId = [Guid]::NewGuid().ToString('D')
 $runId = "run-$RunNumber-$($runStartedUtc.ToString('yyyyMMddTHHmmssZ'))"
@@ -60,6 +62,7 @@ Start-Transcript -Path (Join-Path $logs 'acceptance-transcript.txt') -Force | Ou
 $assertions = [System.Collections.Generic.List[object]]::new()
 $failed = $false
 $installedApplicationHash = $null
+$sourceManifestHash = $null
 $appProcess = $null
 $excel = $null
 $xlsxWorkbook = $null
@@ -675,6 +678,8 @@ function Write-EnvironmentManifest {
         installedApplicationPath = $application
         installedApplicationSha256 = $installedHash
         sourceCommit = $sourceCommit
+        releaseCommit = $releaseCommit
+        sourceManifestSha256 = $sourceManifestHash
     }
     Write-AcceptanceUtf8File -Path (Join-Path $evidence 'environment.json') -Content ($manifest | ConvertTo-Json -Depth 8)
 }
@@ -685,8 +690,8 @@ try {
     if ($installerHash -ne $ExpectedInstallerSha256.ToUpperInvariant()) {
         throw "Installer SHA-256 $installerHash does not match expected $ExpectedInstallerSha256."
     }
-    if ($sourceCommit -ne $ExpectedSourceCommit.ToLowerInvariant()) {
-        throw "Source commit $sourceCommit does not match expected $ExpectedSourceCommit."
+    if ($releaseCommit -notmatch '^[a-f0-9]{40}$') {
+        throw "Release commit is malformed: $releaseCommit."
     }
     $dirtySource = @(& git -C $repositoryRoot status --porcelain --untracked-files=all 2>$null)
     if ($dirtySource.Count -ne 0) {
@@ -713,6 +718,24 @@ try {
         if (-not (Test-Path $startMenuShortcut)) { throw 'Start-menu shortcut is missing.' }
     } 'environment.json'
     $installedApplicationHash = Get-AcceptanceFileSha256 -Path $application
+    Invoke-Step 'installed build identity matches frozen source checkout' {
+        $installedBuildIdentity = Join-Path $installDirectory 'BUILD-IDENTITY.json'
+        $installedSourceManifest = Join-Path $installDirectory 'BUILD-SOURCE-SHA256SUMS.txt'
+        $buildIdentityOutput = & $buildIdentityValidator `
+            -IdentityPath $installedBuildIdentity `
+            -SourceManifestPath $installedSourceManifest `
+            -RepositoryRoot $repositoryRoot `
+            -ExpectedVersion $Version `
+            -ExpectedSourceCommit $sourceCommit
+        if (@($buildIdentityOutput).Count -ne 1 -or [string]$buildIdentityOutput -notlike 'CANDIDATE_BUILD_IDENTITY_VALID|*') {
+            throw 'Installed candidate build identity validator did not emit its exact pass marker.'
+        }
+        $candidateBuildEvidence = Join-Path $evidence 'candidate-build'
+        New-Item -ItemType Directory -Path $candidateBuildEvidence -Force | Out-Null
+        Copy-Item -LiteralPath $installedBuildIdentity -Destination (Join-Path $candidateBuildEvidence 'BUILD-IDENTITY.json')
+        Copy-Item -LiteralPath $installedSourceManifest -Destination (Join-Path $candidateBuildEvidence 'BUILD-SOURCE-SHA256SUMS.txt')
+        $script:sourceManifestHash = Get-AcceptanceFileSha256 -Path $installedSourceManifest
+    } 'candidate-build/BUILD-IDENTITY.json'
 
     $excel = New-Object -ComObject Excel.Application
     $excel.Visible = $true
@@ -972,6 +995,8 @@ finally {
         startedUtc = $runStartedUtc.ToString('O')
         finishedUtc = [DateTime]::UtcNow.ToString('O')
         sourceCommit = $sourceCommit
+        releaseCommit = $releaseCommit
+        sourceManifestSha256 = $sourceManifestHash
         vmSnapshotName = $VmSnapshotName
         vmSnapshotId = $VmSnapshotId
         installerSha256 = Get-AcceptanceFileSha256 -Path $installer

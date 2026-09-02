@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "repository": "yogoldy/excel-diff-tracker",
+  "candidatePolicies": {
+    "0.1.2": {
+      "requiredPriorVersion": "0.1.1",
+      "priorTag": "v0.1.1",
+      "priorSourceCommit": "1b582ab5393564dbec33d1ba38e69052e8e9936c",
+      "priorReleaseUrl": "https://github.com/yogoldy/excel-diff-tracker/releases/tag/v0.1.1",
+      "priorInstallerAssetUrl": "https://github.com/yogoldy/excel-diff-tracker/releases/download/v0.1.1/ExcelDiffTracker-Setup-arm64.exe",
+      "priorInstallerSha256": "491F37DA829C4A167B5C1C4CD1BD908503E6A31CFC4B75819B45F0C5426FEFF6",
+      "priorInstalledApplicationSha256": "D9901C2709C1759A96BFCFADA71C42018575CD6781C8FF717ADA6D76A255DAD8"
+    }
+  }
+}

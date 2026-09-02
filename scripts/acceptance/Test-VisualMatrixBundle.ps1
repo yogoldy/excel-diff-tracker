@@ -383,4 +383,6 @@ if (-not @($resultsOnly | Where-Object { $_.warningAccessible -eq $true }).Count
     measuredScales = $actualScales
     installerSha256 = $installerHash
     applicationSha256 = $applicationHash
+    reviewer = if ($RequireHumanApproval) { @($humanReviewers)[0] } else { $null }
+    reviewedUtc = if ($RequireHumanApproval) { @($humanReviewTimes)[0] } else { $null }
 }

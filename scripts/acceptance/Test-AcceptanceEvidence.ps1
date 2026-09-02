@@ -15,6 +15,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'UiAutomation.psm1') -Force
+$repositoryRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $root = (Resolve-Path $AcceptanceDirectory).Path
 $installer = (Resolve-Path $InstallerPath).Path
 $probe = (Resolve-Path $ProbePath).Path
@@ -27,6 +28,9 @@ $semanticMatrixValidator = (Resolve-Path (Join-Path $PSScriptRoot 'Test-Installe
 $visualMatrixValidator = (Resolve-Path (Join-Path $PSScriptRoot 'Test-VisualMatrixBundle.ps1')).Path
 $recoveryMatrixValidator = (Resolve-Path (Join-Path $PSScriptRoot 'Test-InstalledRecoveryMatrixResult.ps1')).Path
 $lifecycleUpgradeValidator = (Resolve-Path (Join-Path $PSScriptRoot 'Test-InstalledLifecycleUpgradeResult.ps1')).Path
+$buildIdentityValidator = (Resolve-Path (Join-Path $PSScriptRoot 'Test-BuildIdentity.ps1')).Path
+$releaseBaselineValidator = (Resolve-Path (Join-Path $PSScriptRoot 'Test-ReleaseBaselinePolicy.ps1')).Path
+$releaseBaselinePolicy = (Resolve-Path (Join-Path $repositoryRoot 'packaging\release-baselines.json')).Path
 $validationStartedUtc = [DateTime]::UtcNow
 $guidPattern = '^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$'
 
@@ -40,6 +44,16 @@ if ($acceptanceCutoffDateTimeUtc -gt $validationStartedUtc -or $acceptanceCutoff
 
 if ([version]$CandidateVersion -le [version]$PriorVersion) {
     throw "CandidateVersion must be newer than PriorVersion; got $PriorVersion -> $CandidateVersion."
+}
+$releaseBaselineValidation = & $releaseBaselineValidator `
+    -PolicyPath $releaseBaselinePolicy `
+    -RepositoryRoot $repositoryRoot `
+    -CandidateVersion $CandidateVersion `
+    -PriorInstallerPath $priorInstaller `
+    -ExpectedPriorApplicationSha256 $ExpectedPriorApplicationSha256 `
+    -PriorVersion $PriorVersion
+if ($releaseBaselineValidation.status -ne 'Passed') {
+    throw 'The retained prior installer did not match the pinned public-release baseline.'
 }
 
 function Test-ChecksumManifest {
@@ -298,6 +312,25 @@ $runSummaries = foreach ($run in $runs | Sort-Object Name) {
         $environment.runEvidenceId -ne $summary.runEvidenceId -or $environment.startedUtc -ne $summary.startedUtc) {
         throw "Acceptance environment is not bound to the exact outer run identity: $environmentPath"
     }
+    if ($summary.sourceCommit -notmatch '^[a-f0-9]{40}$' -or $summary.releaseCommit -notmatch '^[a-f0-9]{40}$' -or
+        $summary.sourceManifestSha256 -notmatch '^[A-Fa-f0-9]{64}$' -or $environment.sourceCommit -ne $summary.sourceCommit -or
+        $environment.releaseCommit -ne $summary.releaseCommit -or $environment.sourceManifestSha256 -ne $summary.sourceManifestSha256) {
+        throw "Acceptance build/release source identity is incomplete or inconsistent: $environmentPath"
+    }
+    $buildIdentityPath = Join-Path $run.FullName 'candidate-build\BUILD-IDENTITY.json'
+    $sourceManifestPath = Join-Path $run.FullName 'candidate-build\BUILD-SOURCE-SHA256SUMS.txt'
+    $buildIdentityOutput = & $buildIdentityValidator `
+        -IdentityPath $buildIdentityPath `
+        -SourceManifestPath $sourceManifestPath `
+        -RepositoryRoot $repositoryRoot `
+        -ExpectedVersion $CandidateVersion `
+        -ExpectedSourceCommit $summary.sourceCommit
+    if (@($buildIdentityOutput).Count -ne 1 -or [string]$buildIdentityOutput -notlike 'CANDIDATE_BUILD_IDENTITY_VALID|*') {
+        throw "Installed candidate build identity did not validate: $($run.FullName)"
+    }
+    if ((Get-AcceptanceFileSha256 -Path $sourceManifestPath) -ne $summary.sourceManifestSha256.ToUpperInvariant()) {
+        throw "Acceptance summary names a different source manifest: $($run.FullName)"
+    }
     Test-GoldenExcelEvidence $run.FullName
     Test-LifecycleEvidence $run.FullName $environment
     if ($environment.isAdministrator -ne $false) { throw "Acceptance run did not use a standard non-administrator account: $environmentPath" }
@@ -372,6 +405,8 @@ $runSummaries = foreach ($run in $runs | Sort-Object Name) {
         manifestSha256 = $runManifestSha256
         subgateEvidenceIds = @($semanticIdentity.evidenceId, $recoveryMatrixIdentity.evidenceId, $largeIdentity.evidenceId, $soakIdentity.evidenceId)
         sourceCommit = $summary.sourceCommit
+        releaseCommit = $summary.releaseCommit
+        sourceManifestSha256 = $summary.sourceManifestSha256.ToUpperInvariant()
         vmSnapshotName = $summary.vmSnapshotName
         vmSnapshotId = $summary.vmSnapshotId
         installerSha256 = $summary.installerSha256
@@ -402,6 +437,10 @@ if (@(Compare-Object $requiredRunNumbers @($runSummaries.runNumber)).Count -ne 0
 if (@($runSummaries.sourceCommit | Select-Object -Unique).Count -ne 1) {
     throw 'The two clean acceptance runs name different source commits.'
 }
+if (@($runSummaries.releaseCommit | Select-Object -Unique).Count -ne 1 -or
+    @($runSummaries.sourceManifestSha256 | Select-Object -Unique).Count -ne 1) {
+    throw 'The two clean acceptance runs name different release commits or source manifests.'
+}
 
 $lifecycleUpgradeResults = @(Get-ChildItem $root -Filter 'installed-lifecycle-upgrade.json' -File -Recurse)
 if ($lifecycleUpgradeResults.Count -ne 1) {
@@ -429,6 +468,15 @@ if ($visualValidation.status -ne 'Approved') {
     throw 'The strict visual/accessibility bundle validator did not approve the candidate.'
 }
 $visualMatrices = @(Get-ChildItem $root -Filter visual-matrix.json -File -Recurse)
+$lifecycleUpgradeResult = Get-Content $lifecycleUpgradeResults[0].FullName -Raw | ConvertFrom-Json
+$latestEvidenceUtc = @(
+    @($runSummaries | ForEach-Object { $_.finishedUtc })
+    @([DateTime]::Parse([string]$lifecycleUpgradeResult.completedUtc).ToUniversalTime())
+    @($visualMatrices | ForEach-Object {
+        $matrix = Get-Content $_.FullName -Raw | ConvertFrom-Json
+        [DateTime]::Parse([string]$matrix.humanReview.reviewedUtc).ToUniversalTime()
+    })
+) | Sort-Object -Descending | Select-Object -First 1
 
 function Get-EvidenceDigest {
     $excludedRootFiles = @('approval.json', 'EVIDENCE_SHA256SUMS.txt')
@@ -468,15 +516,39 @@ $attestations = foreach ($entry in $requiredAttestations.GetEnumerator()) {
     if ($attestation.installerSha256.ToUpperInvariant() -ne $installerHash) { throw "Attestation names a different installer: $path" }
     if ([string]::IsNullOrWhiteSpace($attestation.reviewer)) { throw "Attestation reviewer is missing: $path" }
     if ($attestation.role -ne $entry.Value) { throw "Attestation has the wrong role: $path" }
+    if ($entry.Value -eq 'Visual/accessibility reviewer' -and $attestation.reviewer.Trim() -cne $visualValidation.reviewer) {
+        throw "Visual attestation reviewer does not match the reviewer who approved the exact visual bundle: $path"
+    }
     if ($attestation.sourceCommit -ne $runSummaries[0].sourceCommit) { throw "Attestation names a different source commit: $path" }
+    if ($attestation.releaseCommit -ne $runSummaries[0].releaseCommit) { throw "Attestation names a different release commit: $path" }
+    if ($attestation.sourceManifestSha256.ToUpperInvariant() -ne $runSummaries[0].sourceManifestSha256) { throw "Attestation names a different source manifest: $path" }
     if ($attestation.installedApplicationSha256.ToUpperInvariant() -ne $runSummaries[0].installedApplicationSha256) { throw "Attestation names a different installed executable: $path" }
     if ($attestation.evidenceSha256.ToUpperInvariant() -ne $evidenceDigest) { throw "Attestation is not bound to the current evidence digest: $path" }
-    if ([string]::IsNullOrWhiteSpace($attestation.reviewedUtc)) { throw "Attestation review timestamp is missing: $path" }
-    [pscustomobject]@{ file = $name; reviewer = $attestation.reviewer; role = $attestation.role; status = $attestation.status }
+    if ([string]::IsNullOrWhiteSpace($attestation.notes) -or $attestation.notes.Trim().Length -lt 20) { throw "Attestation review notes are missing or too short: $path" }
+    $attestationReviewedUtc = [DateTime]::MinValue
+    if (-not [DateTime]::TryParse([string]$attestation.reviewedUtc, [ref]$attestationReviewedUtc) -or
+        $attestationReviewedUtc.ToUniversalTime() -lt $latestEvidenceUtc -or
+        $attestationReviewedUtc.ToUniversalTime() -gt [DateTime]::UtcNow.AddMinutes(5)) {
+        throw "Attestation review timestamp is invalid or predates completed evidence: $path"
+    }
+    [pscustomobject]@{
+        file = $name
+        sha256 = Get-AcceptanceFileSha256 -Path $path
+        reviewer = $attestation.reviewer
+        role = $attestation.role
+        status = $attestation.status
+        reviewedUtc = $attestationReviewedUtc.ToUniversalTime().ToString('O')
+    }
 }
 if (@($attestations.reviewer | Select-Object -Unique).Count -ne $requiredAttestations.Count) {
     throw 'Independent attestations must name three distinct reviewers.'
 }
+$attestationHashLines = @($attestations | Sort-Object file | ForEach-Object { "$($_.sha256.ToLowerInvariant())  attestations/$($_.file)" })
+$attestationHashText = (($attestationHashLines -join "`n") + "`n")
+$attestationHashBytes = [System.Text.UTF8Encoding]::new($false).GetBytes($attestationHashText)
+$attestationAlgorithm = [System.Security.Cryptography.SHA256]::Create()
+try { $attestationSetSha256 = -join @($attestationAlgorithm.ComputeHash($attestationHashBytes) | ForEach-Object { $_.ToString('X2') }) }
+finally { $attestationAlgorithm.Dispose() }
 
 $approval = [ordered]@{
     schemaVersion = 2
@@ -484,7 +556,11 @@ $approval = [ordered]@{
     installerSha256 = $installerHash
     installedApplicationSha256 = $runSummaries[0].installedApplicationSha256
     sourceCommit = $runSummaries[0].sourceCommit
+    releaseCommit = $runSummaries[0].releaseCommit
+    sourceManifestSha256 = $runSummaries[0].sourceManifestSha256
+    releaseBaseline = $releaseBaselineValidation
     evidenceSha256 = $evidenceDigest
+    attestationSetSha256 = $attestationSetSha256
     acceptanceCutoffUtc = $AcceptanceCutoffUtc.ToString('O')
     validationStartedUtc = $validationStartedUtc.ToString('O')
     approvedUtc = [DateTime]::UtcNow.ToString('O')
