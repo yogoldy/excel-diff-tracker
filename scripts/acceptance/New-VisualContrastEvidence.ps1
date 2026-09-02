@@ -77,7 +77,7 @@ $contract = @(
     New-Check 'focus-on-sidebar' 'essential-ui' 'AccentBrush' 'SidebarBrush' 3.0
     New-Check 'primary-fill-on-app' 'essential-ui' 'AccentBrush' 'AppBackgroundBrush' 3.0
     New-Check 'primary-fill-on-card' 'essential-ui' 'AccentBrush' 'CardBrush' 3.0
-    New-Check 'primary-focus-on-fill' 'essential-ui' 'TextBrush' 'AccentBrush' 3.0
+    New-Check 'primary-focus-on-fill' 'essential-ui' 'PrimaryForegroundBrush' 'AccentBrush' 3.0
     New-Check 'warning-symbol' 'essential-ui' 'WarningBrush' 'CardBrush' 3.0
     New-Check 'error-symbol' 'essential-ui' 'ErrorBrush' 'CardBrush' 3.0
 )

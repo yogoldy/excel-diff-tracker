@@ -455,7 +455,7 @@ function Invoke-RecoveryScenario {
     }
     catch {
         $scenario.failure = $_.Exception.ToString()
-        if ($null -eq $script:fatalFailure) { $script:fatalFailure = "$Id: $($_.Exception.Message)" }
+        if ($null -eq $script:fatalFailure) { $script:fatalFailure = "${Id}: $($_.Exception.Message)" }
     }
     finally {
         $scenario.finishedUtc = [DateTime]::UtcNow.ToString('O')

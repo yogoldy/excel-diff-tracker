@@ -34,6 +34,8 @@ $soakRunner = (Resolve-Path (Join-Path $PSScriptRoot 'Invoke-RealExcelSoak.ps1')
 $soakValidator = (Resolve-Path (Join-Path $PSScriptRoot 'Test-RealExcelSoakResult.ps1')).Path
 $semanticMatrixRunner = (Resolve-Path (Join-Path $PSScriptRoot 'Invoke-InstalledSemanticMatrix.ps1')).Path
 $semanticMatrixValidator = (Resolve-Path (Join-Path $PSScriptRoot 'Test-InstalledSemanticMatrixResult.ps1')).Path
+$recoveryMatrixRunner = (Resolve-Path (Join-Path $PSScriptRoot 'Invoke-InstalledRecoveryMatrix.ps1')).Path
+$recoveryMatrixValidator = (Resolve-Path (Join-Path $PSScriptRoot 'Test-InstalledRecoveryMatrixResult.ps1')).Path
 $sourceCommit = (& git -C $repositoryRoot rev-parse HEAD 2>$null).Trim()
 $runStartedUtc = [DateTime]::UtcNow
 $runId = "run-$RunNumber-$($runStartedUtc.ToString('yyyyMMddTHHmmssZ'))"
@@ -722,7 +724,13 @@ try {
     Prepare-RecoveryFixtures
     Write-EnvironmentManifest
 
-    $appProcess = Start-Process $application -PassThru
+    Start-Process $startMenuShortcut | Out-Null
+    $onboarding = Find-UiaWindow -Title 'Welcome to Excel Diff Tracker' -TimeoutSeconds 20
+    $appProcess = Get-Process -Id $onboarding.Current.ProcessId -ErrorAction Stop
+    if (-not [string]::Equals($appProcess.Path, $application, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "The Start-menu shortcut launched an unexpected executable: $($appProcess.Path)"
+    }
+    Add-Assertion 'Start-menu shortcut launches the installed executable' $true 'screenshots/onboarding-step-1.png' $appProcess.Path
     $onboarding = Get-ProductWindow 'Welcome to Excel Diff Tracker'
     Save-UiState 'onboarding-step-1' $onboarding
     Invoke-Step 'onboarding step 1 renders' { Find-UiaElement -Root $onboarding -AutomationId 'OnboardingNextButton' | Out-Null } 'screenshots/onboarding-step-1.png'
@@ -812,7 +820,7 @@ try {
     $main = Get-ProductWindow 'Excel Diff Tracker'
     Save-UiState 'history-after-real-excel-saves' $main
 
-    Invoke-Step 'installed app tray, relaunch, startup, and repair lifecycle' {
+    Invoke-Step 'installed app tray, relaunch, background argument, and repair lifecycle' {
         Invoke-LifecycleGate
         $main = Get-ProductWindow 'Excel Diff Tracker'
     } 'lifecycle/lifecycle.json'
@@ -824,6 +832,7 @@ try {
             -ExpectedInstallerSha256 $installerHash `
             -ExpectedApplicationSha256 $installedApplicationHash `
             -ProbePath $probe `
+            -XlsmFixture $sourceXlsm `
             -EvidenceDirectory $semanticEvidence `
             -ConfirmInstalledCandidate
         $semanticResult = Join-Path $semanticEvidence 'installed-semantic-matrix.json'
@@ -831,8 +840,33 @@ try {
             -ResultPath $semanticResult `
             -InstallerPath $installer `
             -ExpectedApplicationSha256 $installedApplicationHash `
-            -ProbePath $probe
+            -ProbePath $probe `
+            -XlsmFixture $sourceXlsm
     } 'semantic-matrix/installed-semantic-matrix.json'
+
+    Invoke-Step 'installed watcher and recovery matrix' {
+        Close-ProductWindowToTray
+        Exit-ProductThroughTray
+        $recoveryMatrixEvidence = Join-Path $evidence 'recovery-matrix'
+        $null = & $recoveryMatrixRunner `
+            -InstallerPath $installer `
+            -ExpectedInstallerSha256 $installerHash `
+            -ExpectedApplicationSha256 $installedApplicationHash `
+            -ProbePath $probe `
+            -EvidenceDirectory $recoveryMatrixEvidence `
+            -ConfirmDisposableCleanVm
+        $recoveryMatrixResult = Join-Path $recoveryMatrixEvidence 'installed-recovery-matrix.json'
+        $null = & $recoveryMatrixValidator `
+            -ResultPath $recoveryMatrixResult `
+            -InstallerPath $installer `
+            -ExpectedApplicationSha256 $installedApplicationHash `
+            -ProbePath $probe
+        $script:appProcess = Get-Process -Name 'ExcelDiffTracker' -ErrorAction Stop | Where-Object {
+            try { [string]::Equals($_.Path, $application, [StringComparison]::OrdinalIgnoreCase) } catch { $false }
+        } | Select-Object -First 1
+        if ($null -eq $script:appProcess) { throw 'The recovery matrix did not leave the installed application running.' }
+        $script:main = Get-ProductWindow 'Excel Diff Tracker'
+    } 'recovery-matrix/installed-recovery-matrix.json'
 
     Invoke-Step 'installed-product 500,000-cell benchmark' {
         $largeEvidence = Join-Path $evidence 'large-workbook'

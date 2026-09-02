@@ -99,16 +99,31 @@ public sealed class OnboardingWindowTests
         AssertContrast(palette, "ErrorBrush", "CardBrush");
     }
 
+    [Theory]
+    [InlineData(AppTheme.Light)]
+    [InlineData(AppTheme.Dark)]
+    public void ThemePalettesMeetEssentialUiContrastRequirements(AppTheme theme)
+    {
+        var palette = ThemeManager.GetPalette(theme);
+
+        AssertContrast(palette, "BorderBrush", "CardBrush", 3);
+        AssertContrast(palette, "BorderBrush", "AppBackgroundBrush", 3);
+        AssertContrast(palette, "AccentBrush", "CardBrush", 3);
+        AssertContrast(palette, "AccentBrush", "SidebarBrush", 3);
+        AssertContrast(palette, "AccentBrush", "AppBackgroundBrush", 3);
+        AssertContrast(palette, "PrimaryForegroundBrush", "AccentBrush", 3);
+    }
+
     private static Color GetResourceColor(Application application, string key) =>
         Assert.IsType<SolidColorBrush>(application.Resources[key]).Color;
 
-    private static void AssertContrast(IReadOnlyDictionary<string, string> palette, string foreground, string background)
+    private static void AssertContrast(IReadOnlyDictionary<string, string> palette, string foreground, string background, double minimum = 4.5)
     {
         var foregroundColor = (Color)ColorConverter.ConvertFromString(palette[foreground]);
         var backgroundColor = (Color)ColorConverter.ConvertFromString(palette[background]);
         var lighter = Math.Max(RelativeLuminance(foregroundColor), RelativeLuminance(backgroundColor));
         var darker = Math.Min(RelativeLuminance(foregroundColor), RelativeLuminance(backgroundColor));
-        Assert.True((lighter + 0.05) / (darker + 0.05) >= 4.5, $"{foreground} on {background} did not meet 4.5:1 contrast.");
+        Assert.True((lighter + 0.05) / (darker + 0.05) >= minimum, $"{foreground} on {background} did not meet {minimum:N1}:1 contrast.");
     }
 
     private static double RelativeLuminance(Color color) =>

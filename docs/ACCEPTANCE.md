@@ -47,6 +47,8 @@ For both formats, add the fixture through the installed UI while it is already o
 
 Every clean critical-path run must execute the automated exclusive-lock recovery gate. The gate writes a valid changed workbook while its tracked path is held with `FileShare.None`, retains that lock until the installed product records its 60-second warning, proves the sequence and baseline hash did not advance, renders the actionable warning in History, then releases the handle without another save. Recovery must capture the one exact delta and return to Active within 20 seconds; a reconciliation settle check must still show sequence 1 with unchanged source bytes and no duplicate warning or version. `recovery/recovery.json` and its raw probe outputs are mandatory, checksummed run evidence.
 
+Each clean run must also execute `Invoke-InstalledRecoveryMatrix.ps1` and pass `Test-InstalledRecoveryMatrixResult.ps1`. Its eleven named scenarios and exact phase sets are mandatory; missing, duplicated, reordered, or inexact scenario evidence fails the run. See [the installed recovery-matrix procedure](INSTALLED_RECOVERY_MATRIX.md).
+
 ### 500,000-cell product benchmark
 
 This is an installed-product test, not direct extraction. Add a seeded 500,000-populated-cell fixture through the UI, open it in visible Excel, and make three saves touching cells near the beginning, middle, and end.

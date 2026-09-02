@@ -17,7 +17,7 @@ public sealed class ThemeManager : IDisposable
     {
         ["AppBackgroundBrush"] = "#242825", ["SidebarBrush"] = "#1D211F", ["CardBrush"] = "#2D332F",
         ["CardHoverBrush"] = "#35423C", ["TextBrush"] = "#EDF2EE", ["MutedTextBrush"] = "#A9B4AF",
-        ["BorderBrush"] = "#465049", ["AccentBrush"] = "#65CBB0", ["AccentSoftBrush"] = "#314D45",
+        ["BorderBrush"] = "#7F8B85", ["AccentBrush"] = "#65CBB0", ["AccentSoftBrush"] = "#314D45",
         ["WarningBrush"] = "#E5A64B", ["ErrorBrush"] = "#F07D7D", ["PrimaryForegroundBrush"] = "#10221D"
     };
 
@@ -25,7 +25,7 @@ public sealed class ThemeManager : IDisposable
     {
         ["AppBackgroundBrush"] = "#F6F4EF", ["SidebarBrush"] = "#ECE9E1", ["CardBrush"] = "#FFFEFB",
         ["CardHoverBrush"] = "#F3F7F4", ["TextBrush"] = "#24312D", ["MutedTextBrush"] = "#5E6965",
-        ["BorderBrush"] = "#D9DED9", ["AccentBrush"] = "#236B5C", ["AccentSoftBrush"] = "#DDEDE7",
+        ["BorderBrush"] = "#737E79", ["AccentBrush"] = "#236B5C", ["AccentSoftBrush"] = "#DDEDE7",
         ["WarningBrush"] = "#A86413", ["ErrorBrush"] = "#B33A3A", ["PrimaryForegroundBrush"] = "#FFFFFF"
     };
 

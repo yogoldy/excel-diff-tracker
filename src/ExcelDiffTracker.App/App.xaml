@@ -10,7 +10,7 @@
             <SolidColorBrush x:Key="CardHoverBrush" Color="#F3F7F4" />
             <SolidColorBrush x:Key="TextBrush" Color="#24312D" />
             <SolidColorBrush x:Key="MutedTextBrush" Color="#5E6965" />
-            <SolidColorBrush x:Key="BorderBrush" Color="#D9DED9" />
+            <SolidColorBrush x:Key="BorderBrush" Color="#737E79" />
             <SolidColorBrush x:Key="AccentBrush" Color="#236B5C" />
             <SolidColorBrush x:Key="AccentSoftBrush" Color="#DDEDE7" />
             <SolidColorBrush x:Key="WarningBrush" Color="#A86413" />
@@ -63,7 +63,7 @@
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chrome" Property="Opacity" Value="0.88"/></Trigger>
                                 <Trigger Property="IsPressed" Value="True"><Setter TargetName="Chrome" Property="Opacity" Value="0.72"/></Trigger>
-                                <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource TextBrush}"/></Trigger>
+                                <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource PrimaryForegroundBrush}"/></Trigger>
                                 <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Chrome" Property="Opacity" Value="0.45"/></Trigger>
                             </ControlTemplate.Triggers>
                         </ControlTemplate>

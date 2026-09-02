@@ -225,7 +225,7 @@ $contract = @(
     New-ContrastContractItem 'focus-on-sidebar' 'essential-ui' 'AccentBrush' 'SidebarBrush' 3.0
     New-ContrastContractItem 'primary-fill-on-app' 'essential-ui' 'AccentBrush' 'AppBackgroundBrush' 3.0
     New-ContrastContractItem 'primary-fill-on-card' 'essential-ui' 'AccentBrush' 'CardBrush' 3.0
-    New-ContrastContractItem 'primary-focus-on-fill' 'essential-ui' 'TextBrush' 'AccentBrush' 3.0
+    New-ContrastContractItem 'primary-focus-on-fill' 'essential-ui' 'PrimaryForegroundBrush' 'AccentBrush' 3.0
     New-ContrastContractItem 'warning-symbol' 'essential-ui' 'WarningBrush' 'CardBrush' 3.0
     New-ContrastContractItem 'error-symbol' 'essential-ui' 'ErrorBrush' 'CardBrush' 3.0
 )

@@ -7,6 +7,8 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$AcceptanceDirectory,
     [string]$ProbePath,
+    [Parameter(Mandatory = $true)]
+    [string]$XlsmFixture,
     [switch]$Prerelease
 )
 
@@ -16,6 +18,7 @@ if (-not $ReleaseDirectory) { $ReleaseDirectory = Join-Path $repositoryRoot 'art
 if (-not $ProbePath) { $ProbePath = Join-Path $repositoryRoot 'artifacts\acceptance-tools\win-arm64\ExcelDiffTracker.AcceptanceProbe.exe' }
 $ReleaseDirectory = (Resolve-Path $ReleaseDirectory).Path
 $ProbePath = (Resolve-Path $ProbePath).Path
+$XlsmFixture = (Resolve-Path $XlsmFixture).Path
 $installer = Join-Path $ReleaseDirectory 'ExcelDiffTracker-Setup-arm64.exe'
 $checksumFile = Join-Path $ReleaseDirectory 'SHA256SUMS.txt'
 $releaseNotes = Join-Path $repositoryRoot "docs\RELEASE_NOTES_$Version.md"
@@ -28,7 +31,7 @@ foreach ($required in @($installer, $checksumFile, $releaseNotes, $wingetManifes
 $actualHash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToUpperInvariant()
 $acceptanceDirectoryPath = (Resolve-Path $AcceptanceDirectory).Path
 $acceptanceValidator = Join-Path $repositoryRoot 'scripts\acceptance\Test-AcceptanceEvidence.ps1'
-$null = & $acceptanceValidator -AcceptanceDirectory $acceptanceDirectoryPath -InstallerPath $installer -ProbePath $ProbePath
+$null = & $acceptanceValidator -AcceptanceDirectory $acceptanceDirectoryPath -InstallerPath $installer -ProbePath $ProbePath -XlsmFixture $XlsmFixture
 $approvalPath = Join-Path $acceptanceDirectoryPath 'approval.json'
 if (-not (Test-Path $approvalPath)) {
     throw 'Acceptance approval is missing. Run scripts\acceptance\Test-AcceptanceEvidence.ps1 first.'

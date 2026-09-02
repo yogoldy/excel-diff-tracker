@@ -3,6 +3,7 @@ param(
     [Parameter(Mandatory)] [string] $AcceptanceDirectory,
     [Parameter(Mandatory)] [string] $InstallerPath,
     [Parameter(Mandatory)] [string] $ProbePath,
+    [Parameter(Mandatory)] [string] $XlsmFixture,
     [ValidateRange(2, 10)] [int] $RequiredRunCount = 2
 )
 
@@ -12,11 +13,13 @@ Import-Module (Join-Path $PSScriptRoot 'UiAutomation.psm1') -Force
 $root = (Resolve-Path $AcceptanceDirectory).Path
 $installer = (Resolve-Path $InstallerPath).Path
 $probe = (Resolve-Path $ProbePath).Path
+$xlsmFixture = (Resolve-Path $XlsmFixture).Path
 $installerHash = Get-AcceptanceFileSha256 -Path $installer
 $largeBenchmarkValidator = (Resolve-Path (Join-Path $PSScriptRoot 'Test-LargeWorkbookBenchmarkResult.ps1')).Path
 $soakValidator = (Resolve-Path (Join-Path $PSScriptRoot 'Test-RealExcelSoakResult.ps1')).Path
 $semanticMatrixValidator = (Resolve-Path (Join-Path $PSScriptRoot 'Test-InstalledSemanticMatrixResult.ps1')).Path
 $visualMatrixValidator = (Resolve-Path (Join-Path $PSScriptRoot 'Test-VisualMatrixBundle.ps1')).Path
+$recoveryMatrixValidator = (Resolve-Path (Join-Path $PSScriptRoot 'Test-InstalledRecoveryMatrixResult.ps1')).Path
 
 function Test-ChecksumManifest {
     param([string] $RunDirectory)
@@ -261,6 +264,17 @@ $runSummaries = foreach ($run in $runs | Sort-Object Name) {
     }
     $null = & $semanticMatrixValidator `
         -ResultPath $semanticResults[0].FullName `
+        -InstallerPath $installer `
+        -ExpectedApplicationSha256 $summary.installedApplicationSha256 `
+        -ProbePath $probe `
+        -XlsmFixture $xlsmFixture
+
+    $recoveryMatrixResults = @(Get-ChildItem $run.FullName -Filter 'installed-recovery-matrix.json' -File -Recurse)
+    if ($recoveryMatrixResults.Count -ne 1) {
+        throw "Expected exactly one mandatory installed recovery-matrix result, found $($recoveryMatrixResults.Count): $($run.FullName)"
+    }
+    $null = & $recoveryMatrixValidator `
+        -ResultPath $recoveryMatrixResults[0].FullName `
         -InstallerPath $installer `
         -ExpectedApplicationSha256 $summary.installedApplicationSha256 `
         -ProbePath $probe
