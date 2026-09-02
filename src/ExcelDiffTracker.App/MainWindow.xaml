@@ -204,7 +204,7 @@
                     <StackPanel MaxWidth="650" HorizontalAlignment="Left">
                         <TextBlock Style="{StaticResource PageTitle}" Text="About Excel Diff Tracker" AutomationProperties.AutomationId="AboutHeading"/>
                         <TextBlock Style="{StaticResource MutedText}" Text="Private workbook change history for Windows 11 ARM64." Margin="0,0,0,22"/>
-                        <Border Style="{StaticResource Card}"><StackPanel><TextBlock Style="{StaticResource SectionTitle}" Text="Local by design"/><TextBlock Margin="0,10,0,0" Text="Workbook processing, SQLite history, and Markdown reports stay on this PC. There is no account, cloud service, AI, API, telemetry, or Excel add-in."/><TextBlock Margin="0,14,0,0" Style="{StaticResource MutedText}" Text="MIT licensed • Version 0.1.1"/></StackPanel></Border>
+                        <Border Style="{StaticResource Card}"><StackPanel><TextBlock Style="{StaticResource SectionTitle}" Text="Local by design"/><TextBlock Margin="0,10,0,0" Text="Workbook processing, SQLite history, and Markdown reports stay on this PC. There is no account, cloud service, AI, API, telemetry, or Excel add-in."/><TextBlock Margin="0,14,0,0" Style="{StaticResource MutedText}" Text="MIT licensed • Version 0.1.2"/></StackPanel></Border>
                         <Border Style="{StaticResource Card}" Margin="0,14,0,0"><StackPanel><TextBlock Style="{StaticResource SectionTitle}" Text="What version 1 tracks"/><TextBlock Margin="0,10,0,0" Text="Values, exact stored formulas, calculated results, data types, and sheet structure. Styles, colors, comments, charts, and names are deliberately ignored."/></StackPanel></Border>
                     </StackPanel>
                     </ScrollViewer>

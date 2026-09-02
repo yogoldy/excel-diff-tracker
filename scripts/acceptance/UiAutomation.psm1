@@ -5,6 +5,7 @@ Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.Windows.Forms
+if (-not ('ExcelDiffTrackerAcceptanceNative' -as [type])) {
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
@@ -16,8 +17,16 @@ public static class ExcelDiffTrackerAcceptanceNative
 
     [DllImport("user32.dll")]
     public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SetCursorPos(int x, int y);
+
+    [DllImport("user32.dll")]
+    public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extraInfo);
 }
 "@
+}
 
 function Get-UiaRoot {
     [System.Windows.Automation.AutomationElement]::RootElement
@@ -85,6 +94,7 @@ function Find-UiaWindow {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [string] $Title,
+        [int] $ProcessId = 0,
         [int] $TimeoutSeconds = 20
     )
 
@@ -94,7 +104,7 @@ function Find-UiaWindow {
             [System.Windows.Automation.TreeScope]::Children,
             [System.Windows.Automation.Condition]::TrueCondition)
         foreach ($window in $windows) {
-            if ($window.Current.Name -eq $Title) { return $window }
+            if ($window.Current.Name -eq $Title -and ($ProcessId -eq 0 -or $window.Current.ProcessId -eq $ProcessId)) { return $window }
         }
         Start-Sleep -Milliseconds 200
     } while ([DateTime]::UtcNow -lt $deadline)
@@ -165,6 +175,34 @@ function Invoke-UiaElement {
         return
     }
     throw "Element does not expose an invokable UIA pattern: $($Element.Current.AutomationId) $($Element.Current.Name)"
+}
+
+function Invoke-UiaMouseClick {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)] [System.Windows.Automation.AutomationElement] $Element,
+        [ValidateSet('Left','Right','DoubleLeft')] [string] $Button = 'Left'
+    )
+    $bounds = $Element.Current.BoundingRectangle
+    if ($bounds.IsEmpty -or $bounds.Width -le 0 -or $bounds.Height -le 0) {
+        throw "Element has no clickable bounds: $($Element.Current.AutomationId) $($Element.Current.Name)"
+    }
+    $x = [int][math]::Round($bounds.Left + ($bounds.Width / 2.0))
+    $y = [int][math]::Round($bounds.Top + ($bounds.Height / 2.0))
+    if (-not [ExcelDiffTrackerAcceptanceNative]::SetCursorPos($x, $y)) { throw "Could not position the pointer at $x,$y." }
+    Start-Sleep -Milliseconds 100
+    if ($Button -eq 'Right') {
+        [ExcelDiffTrackerAcceptanceNative]::mouse_event(0x0008, 0, 0, 0, [UIntPtr]::Zero)
+        [ExcelDiffTrackerAcceptanceNative]::mouse_event(0x0010, 0, 0, 0, [UIntPtr]::Zero)
+    } else {
+        $count = if ($Button -eq 'DoubleLeft') { 2 } else { 1 }
+        for ($index = 0; $index -lt $count; $index++) {
+            [ExcelDiffTrackerAcceptanceNative]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
+            [ExcelDiffTrackerAcceptanceNative]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
+            if ($count -gt 1) { Start-Sleep -Milliseconds 80 }
+        }
+    }
+    Start-Sleep -Milliseconds 200
 }
 
 function Set-UiaValue {
@@ -276,4 +314,4 @@ function Wait-AcceptanceCondition {
     throw $FailureMessage
 }
 
-Export-ModuleMember -Function Find-UiaWindow, Get-UiaWindowFromHandle, Find-UiaElement, Invoke-UiaElement, Set-UiaValue, Set-UiaForeground, Send-UiaKeys, Export-UiaTree, Save-DesktopScreenshot, Wait-AcceptanceCondition, Write-AcceptanceUtf8File, Get-AcceptanceRelativePath, Get-AcceptanceFileSha256, Get-AcceptanceStreamSha256
+Export-ModuleMember -Function Find-UiaWindow, Get-UiaWindowFromHandle, Find-UiaElement, Invoke-UiaElement, Invoke-UiaMouseClick, Set-UiaValue, Set-UiaForeground, Send-UiaKeys, Export-UiaTree, Save-DesktopScreenshot, Wait-AcceptanceCondition, Write-AcceptanceUtf8File, Get-AcceptanceRelativePath, Get-AcceptanceFileSha256, Get-AcceptanceStreamSha256

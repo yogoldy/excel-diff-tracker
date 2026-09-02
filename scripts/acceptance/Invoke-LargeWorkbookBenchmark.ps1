@@ -50,9 +50,8 @@ $monitorLogPath = Join-Path $logDirectory 'large-workbook-monitor.txt'
 $fullExportPath = Join-Path $reportDirectory 'large-workbook-version-000004-full.md'
 $startedUtc = [DateTime]::UtcNow
 
+if (Test-Path $evidence) { throw "Benchmark evidence directory already exists; use a fresh path: $evidence" }
 New-Item -ItemType Directory -Path $evidence, $fixtureDirectory, $probeDirectory, $reportDirectory, $screenshotDirectory, $uiaDirectory, $telemetryDirectory, $logDirectory -Force | Out-Null
-if (Test-Path $resultPath) { throw "Benchmark result already exists; use a fresh evidence directory: $resultPath" }
-if (Test-Path $fixture) { throw "Benchmark fixture already exists; use a fresh evidence directory: $fixture" }
 if (-not (Test-Path $generator -PathType Leaf)) { throw "Large fixture generator is missing: $generator" }
 
 Import-Module (Join-Path $PSScriptRoot 'UiAutomation.psm1') -Force
@@ -475,6 +474,10 @@ try {
     $monitorStartedUtc = [DateTime]::UtcNow
 
     $baselineStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    $dashboardNavigation = Find-UiaElement -Root $mainWindow -AutomationId 'DashboardNavigationButton'
+    Invoke-UiaElement -Element $dashboardNavigation
+    Start-Sleep -Milliseconds 300
+    $mainWindow = Find-UiaWindow -Title 'Excel Diff Tracker' -TimeoutSeconds 10
     $addButton = Find-UiaElement -Root $mainWindow -AutomationId 'DashboardAddWorkbookButton'
     Invoke-UiaElement -Element $addButton
     Choose-FileFromDialog -Path $fixture

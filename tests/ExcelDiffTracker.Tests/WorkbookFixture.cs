@@ -15,6 +15,26 @@ internal static class WorkbookFixture
         using var document = SpreadsheetDocument.Create(
             path,
             macroEnabled ? SpreadsheetDocumentType.MacroEnabledWorkbook : SpreadsheetDocumentType.Workbook);
+        Populate(document, macroEnabled, sheets);
+    }
+
+    public static void CreateWithCompatibleSharing(string path, bool macroEnabled, params FixtureSheet[] sheets)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        using var stream = new FileStream(
+            path,
+            FileMode.Create,
+            FileAccess.ReadWrite,
+            FileShare.ReadWrite | FileShare.Delete);
+        using var document = SpreadsheetDocument.Create(
+            stream,
+            macroEnabled ? SpreadsheetDocumentType.MacroEnabledWorkbook : SpreadsheetDocumentType.Workbook,
+            autoSave: true);
+        Populate(document, macroEnabled, sheets);
+    }
+
+    private static void Populate(SpreadsheetDocument document, bool macroEnabled, IReadOnlyList<FixtureSheet> sheets)
+    {
         var workbookPart = document.AddWorkbookPart();
         workbookPart.Workbook = new Workbook();
         if (macroEnabled)

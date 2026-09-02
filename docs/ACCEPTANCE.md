@@ -5,7 +5,7 @@ Excel Diff Tracker is approved for release only when the exact installer candida
 ## Fail-closed rules
 
 - Freeze the source commit and installer SHA-256 before acceptance. Any code, packaging, or installer change invalidates every earlier run.
-- Run the critical path twice from named, clean Windows 11 ARM64 VM snapshots using a standard non-administrator account, native ARM64 Microsoft Excel, normal `%LocalAppData%`, and no development .NET on `PATH`.
+- Run the critical path twice from named, clean Windows 11 ARM64 VM snapshots using a standard non-administrator account, real desktop Microsoft Excel (recording whether its executable is ARM64 or x64-under-emulation), normal `%LocalAppData%`, and no development .NET on `PATH`.
 - Keep the first failure and its evidence. A rerun may diagnose a failure but cannot erase it from the candidate record.
 - A skipped, missing, flaky, or inconclusive mandatory assertion is a failure.
 - The installed `ExcelDiffTracker.exe` and its public UI are the system under test. Product assemblies and `ExcelDiffTracker.Smoke.exe` are not valid black-box substitutes.

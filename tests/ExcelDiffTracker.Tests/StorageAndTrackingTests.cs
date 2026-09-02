@@ -149,7 +149,7 @@ public sealed class StorageAndTrackingTests
     }
 
     [Fact]
-    public async Task WorkerCapturesRapidSequentialSavesWithoutCancelingInFlightCapture()
+    public async Task WorkerCapturesSequentialCompatibleSavesWithoutDuplicates()
     {
         using var directory = new TestDirectory();
         var workbookPath = Path.Combine(directory.Path, "rapid.xlsx");
@@ -161,16 +161,56 @@ public sealed class StorageAndTrackingTests
             reconciliationInterval: TimeSpan.FromMilliseconds(100));
         await coordinator.InitializeAsync();
         var tracked = await coordinator.AddWorkbookAsync(workbookPath, Path.Combine(directory.Path, "reports"));
+        var baselineHash = tracked.CurrentHash;
+        var failedCaptureCount = 0;
+        coordinator.CaptureOccurred += (_, capture) =>
+        {
+            if (capture.Kind == CaptureEventKind.Failed)
+                Interlocked.Increment(ref failedCaptureCount);
+        };
         await coordinator.StartAsync();
 
-        WorkbookFixture.Create(workbookPath, false, new FixtureSheet(1, "Sheet1", null, new FixtureCell("A1", "2")));
-        await WaitForVersionCountAsync(store, tracked.Id, 1);
-        WorkbookFixture.Create(workbookPath, false, new FixtureSheet(1, "Sheet1", null, new FixtureCell("A1", "3")));
-        await WaitForVersionCountAsync(store, tracked.Id, 2);
+        WorkbookFixture.CreateWithCompatibleSharing(workbookPath, false, new FixtureSheet(1, "Sheet1", null, new FixtureCell("A1", "2")));
+        var firstSaveHash = Hash(workbookPath);
+        await WaitForReadyVersionCountAsync(store, tracked.Id, 1);
+        WorkbookFixture.CreateWithCompatibleSharing(workbookPath, false, new FixtureSheet(1, "Sheet1", null, new FixtureCell("A1", "3")));
+        var secondSaveHash = Hash(workbookPath);
+        await WaitForReadyVersionCountAsync(store, tracked.Id, 2);
+        await Task.Delay(600);
 
-        var versions = await store.GetVersionsAsync(tracked.Id);
-        Assert.Equal(2, versions.Count);
+        var versions = (await store.GetVersionsAsync(tracked.Id)).OrderBy(item => item.Sequence).ToArray();
+        Assert.Equal(2, versions.Length);
         Assert.Equal(2, versions.Select(item => item.Sha256).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Equal(new long[] { 1, 2 }, versions.Select(item => item.Sequence));
+        Assert.Equal(baselineHash, versions[0].PreviousSha256);
+        Assert.Equal(firstSaveHash, versions[0].Sha256);
+        Assert.Equal(firstSaveHash, versions[1].PreviousSha256);
+        Assert.Equal(secondSaveHash, versions[1].Sha256);
+        Assert.All(versions, version => Assert.Equal(ReportStatus.Ready, version.ReportStatus));
+
+        var firstDiff = await store.GetVersionDiffAsync(versions[0].Id);
+        var firstDelta = Assert.Single(firstDiff.CellChanges);
+        Assert.Empty(firstDiff.SheetChanges);
+        Assert.Equal("A1", firstDelta.Address);
+        Assert.Equal(new[] { CellChangeKind.LiteralChanged }, firstDelta.Kinds);
+        Assert.Equal("1", firstDelta.Before?.LiteralValue);
+        Assert.Equal("2", firstDelta.After?.LiteralValue);
+
+        var secondDiff = await store.GetVersionDiffAsync(versions[1].Id);
+        var secondDelta = Assert.Single(secondDiff.CellChanges);
+        Assert.Empty(secondDiff.SheetChanges);
+        Assert.Equal("A1", secondDelta.Address);
+        Assert.Equal(new[] { CellChangeKind.LiteralChanged }, secondDelta.Kinds);
+        Assert.Equal("2", secondDelta.Before?.LiteralValue);
+        Assert.Equal("3", secondDelta.After?.LiteralValue);
+
+        var finalWorkbook = await store.GetTrackedWorkbookAsync(tracked.Id);
+        Assert.NotNull(finalWorkbook);
+        Assert.Equal(2, finalWorkbook.CurrentSequence);
+        Assert.Equal(secondSaveHash, finalWorkbook.CurrentHash);
+        Assert.Equal("3", (await store.LoadCurrentSnapshotAsync(finalWorkbook)).Sheets[1].Cells["A1"].LiteralValue);
+        Assert.Empty(await store.GetErrorsAsync(tracked.Id));
+        Assert.Equal(0, Volatile.Read(ref failedCaptureCount));
     }
 
     [Fact]
@@ -311,6 +351,19 @@ public sealed class StorageAndTrackingTests
             await Task.Delay(50);
         }
         Assert.Fail($"Expected {expected} versions before timeout.");
+    }
+
+    private static async Task WaitForReadyVersionCountAsync(HistoryStore store, Guid workbookId, int expected)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(8);
+        while (DateTime.UtcNow < deadline)
+        {
+            var versions = await store.GetVersionsAsync(workbookId);
+            if (versions.Count == expected && versions.All(version => version.ReportStatus == ReportStatus.Ready))
+                return;
+            await Task.Delay(50);
+        }
+        Assert.Fail($"Expected exactly {expected} ready versions before timeout.");
     }
 
     private static async Task WaitForErrorCountAsync(HistoryStore store, Guid workbookId, int expected)

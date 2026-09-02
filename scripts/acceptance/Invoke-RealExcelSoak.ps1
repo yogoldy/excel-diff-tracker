@@ -9,7 +9,7 @@ param(
     [Parameter(Mandatory)] [string] $EvidenceDirectory,
     [string] $ApplicationPath = (Join-Path $env:LOCALAPPDATA 'Programs\Excel Diff Tracker\ExcelDiffTracker.exe'),
     [string] $DatabasePath = (Join-Path $env:LOCALAPPDATA 'Excel Diff Tracker\history.db'),
-    [ValidateRange(20, 100)] [int] $SaveCount = 20,
+    [ValidateSet(20)] [int] $SaveCount = 20,
     [ValidateRange(30, 300)] [int] $SaveIntervalSeconds = 32,
     [switch] $ConfirmInstalledCandidate
 )
@@ -37,6 +37,7 @@ $database = [System.IO.Path]::GetFullPath($DatabasePath)
 $evidence = [System.IO.Path]::GetFullPath($EvidenceDirectory)
 $fixtures = Join-Path $evidence 'fixtures'
 $probeResults = Join-Path $evidence 'probe'
+$reports = Join-Path $evidence 'reports'
 $screenshots = Join-Path $evidence 'screenshots'
 $uia = Join-Path $evidence 'uia'
 $xlsx = Join-Path $fixtures 'Soak.xlsx'
@@ -44,8 +45,8 @@ $xlsm = Join-Path $fixtures 'Soak Macro.xlsm'
 $resultPath = Join-Path $evidence 'real-excel-soak.json'
 $cell = 'Y1001'
 
-New-Item -ItemType Directory -Path $evidence, $fixtures, $probeResults, $screenshots, $uia -Force | Out-Null
-if (Test-Path $resultPath) { throw "Soak result already exists; use a fresh evidence directory: $resultPath" }
+if (Test-Path $evidence) { throw "Soak evidence directory already exists; use a fresh path: $evidence" }
+New-Item -ItemType Directory -Path $evidence, $fixtures, $probeResults, $reports, $screenshots, $uia -Force | Out-Null
 Copy-Item $sourceXlsx $xlsx -Force
 Copy-Item $sourceXlsm $xlsm -Force
 
@@ -63,6 +64,7 @@ $applicationProcess = $null
 $mainWindow = $null
 $macroHashBefore = $null
 $macroHashAfter = $null
+$scheduleClock = $null
 
 function Add-SoakAssertion {
     param([string] $Name, [bool] $Passed, [string] $Detail = '', [string] $Evidence = '')
@@ -116,6 +118,10 @@ function Choose-FileFromDialog {
 function Add-TrackedWorkbook {
     param([string] $Path)
     Set-UiaForeground -Window $mainWindow
+    $dashboard = Find-UiaElement -Root $mainWindow -AutomationId 'DashboardNavigationButton'
+    Invoke-UiaElement -Element $dashboard
+    Start-Sleep -Milliseconds 300
+    $script:mainWindow = Find-UiaWindow -Title 'Excel Diff Tracker' -TimeoutSeconds 10
     $add = Find-UiaElement -Root $mainWindow -AutomationId 'DashboardAddWorkbookButton'
     Invoke-UiaElement -Element $add
     Choose-FileFromDialog -Path $Path
@@ -127,6 +133,7 @@ function Invoke-ProbeUntilPassed {
         [long] $ExpectedSequence,
         [string] $ExpectedValue,
         [string] $ExpectedKind,
+        [string] $ExpectedBeforeValue,
         [string] $OutputName,
         [int] $TimeoutSeconds = 20,
         [switch] $Baseline
@@ -153,8 +160,13 @@ function Invoke-ProbeUntilPassed {
                 '--address', $cell,
                 '--expected-value', $ExpectedValue,
                 '--expected-kind', $ExpectedKind,
+                '--expected-cell-change-count', '1',
+                '--expected-sheet-change-count', '0',
+                '--require-source-hash-match',
                 '--require-ready-report',
                 '--report-contains', $cell)
+            if ($ExpectedSequence -eq 1) { $arguments += '--expect-before-missing' }
+            else { $arguments += @('--expected-before-value', $ExpectedBeforeValue) }
         }
         $lastOutput = & $probe @arguments 2>&1 | Out-String
         $exitCode = $LASTEXITCODE
@@ -181,16 +193,16 @@ function Activate-AndSaveLiteral {
     [System.Windows.Forms.SendKeys]::SendWait($Value)
     [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')
     [System.Windows.Forms.SendKeys]::SendWait('^s')
-    [DateTime]::UtcNow
+    [System.Diagnostics.Stopwatch]::StartNew()
 }
 
 function Wait-UntilScheduledSave {
-    param([DateTime] $TargetUtc)
-    while ([DateTime]::UtcNow -lt $TargetUtc) {
+    param([System.Diagnostics.Stopwatch] $Clock, [double] $TargetElapsedSeconds)
+    while ($Clock.Elapsed.TotalSeconds -lt $TargetElapsedSeconds) {
         if ($applicationProcess.HasExited) { throw 'Excel Diff Tracker exited between soak saves.' }
         $applicationProcess.Refresh()
         if (-not $applicationProcess.Responding) { throw 'Excel Diff Tracker reported Not Responding between soak saves.' }
-        $remaining = ($TargetUtc - [DateTime]::UtcNow).TotalMilliseconds
+        $remaining = ($TargetElapsedSeconds - $Clock.Elapsed.TotalSeconds) * 1000
         Start-Sleep -Milliseconds ([int][math]::Min(500, [math]::Max(20, $remaining)))
     }
 }
@@ -226,11 +238,13 @@ try {
     Assert-Soak 'both soak baselines are silent sequence zero' ($xlsxBaseline.currentSequence -eq 0 -and $xlsmBaseline.currentSequence -eq 0) 'xlsx=0 xlsm=0'
 
     $scheduleStartedUtc = [DateTime]::UtcNow
+    $scheduleClock = [System.Diagnostics.Stopwatch]::StartNew()
     $xlsxSequence = 0L
     $xlsmSequence = 0L
     for ($index = 1; $index -le $SaveCount; $index++) {
-        $targetUtc = $scheduleStartedUtc.AddSeconds(($index - 1) * $SaveIntervalSeconds)
-        Wait-UntilScheduledSave -TargetUtc $targetUtc
+        $targetElapsedSeconds = [double](($index - 1) * $SaveIntervalSeconds)
+        $targetUtc = $scheduleStartedUtc.AddSeconds($targetElapsedSeconds)
+        Wait-UntilScheduledSave -Clock $scheduleClock -TargetElapsedSeconds $targetElapsedSeconds
         $isXlsx = ($index % 2) -eq 1
         $workbookPath = if ($isXlsx) { $xlsx } else { $xlsm }
         $workbook = if ($isXlsx) { $xlsxWorkbook } else { $xlsmWorkbook }
@@ -238,14 +252,25 @@ try {
         $sequence = if ($isXlsx) { $xlsxSequence } else { $xlsmSequence }
         $format = if ($isXlsx) { 'xlsx' } else { 'xlsm' }
         $value = 'EDT-SOAK-{0:D2}' -f $index
+        $previousValue = if ($sequence -gt 1) { 'EDT-SOAK-{0:D2}' -f ($index - 2) } else { $null }
         $kind = if ($sequence -eq 1) { 'LiteralAdded' } else { 'LiteralChanged' }
         $saveStarted = [DateTime]::UtcNow
-        $ctrlSaveUtc = Activate-AndSaveLiteral -Workbook $workbook -Value $value
+        $monotonicStartSeconds = $scheduleClock.Elapsed.TotalSeconds
+        $captureClock = Activate-AndSaveLiteral -Workbook $workbook -Value $value
+        $ctrlSaveUtc = [DateTime]::UtcNow
         $probeName = '{0}-sequence-{1:D2}.json' -f $format, $sequence
-        $probeResult = Invoke-ProbeUntilPassed -WorkbookPath $workbookPath -ExpectedSequence $sequence -ExpectedValue $value -ExpectedKind $kind -OutputName $probeName
+        $probeResult = Invoke-ProbeUntilPassed -WorkbookPath $workbookPath -ExpectedSequence $sequence -ExpectedValue $value -ExpectedKind $kind -ExpectedBeforeValue $previousValue -OutputName $probeName
+        $captureClock.Stop()
         $saveFinished = [DateTime]::UtcNow
         $fileHash = (Get-FileHash $workbookPath -Algorithm SHA256).Hash.ToUpperInvariant()
         Assert-Soak "soak save $index captured the exact stable hash" ($probeResult.currentHash.ToUpperInvariant() -eq $fileHash -and $probeResult.latestVersion.sha256.ToUpperInvariant() -eq $fileHash) $fileHash "probe/$probeName"
+        $reportName = '{0}-sequence-{1:D2}.md' -f $format, $sequence
+        $reportCopy = Join-Path $reports $reportName
+        Copy-Item $probeResult.latestVersion.reportPath $reportCopy -Force
+        $reportText = [System.IO.File]::ReadAllText($reportCopy)
+        Assert-Soak "soak save $index Markdown contains the exact address and value" (
+            $reportText.IndexOf($cell, [StringComparison]::Ordinal) -ge 0 -and
+            $reportText.IndexOf($value, [StringComparison]::Ordinal) -ge 0) $reportName "reports/$reportName"
         $saves.Add([pscustomobject]@{
             index = $index
             format = $format
@@ -256,20 +281,23 @@ try {
             scheduledUtc = $targetUtc.ToString('O')
             saveStartedUtc = $saveStarted.ToString('O')
             capturedUtc = $saveFinished.ToString('O')
+            monotonicStartSeconds = [math]::Round($monotonicStartSeconds, 3)
             ctrlSaveUtc = $ctrlSaveUtc.ToString('O')
-            captureMilliseconds = [math]::Round(($saveFinished - $ctrlSaveUtc).TotalMilliseconds, 3)
+            captureMilliseconds = [math]::Round($captureClock.Elapsed.TotalMilliseconds, 3)
             sha256 = $fileHash
             probe = "probe/$probeName"
+            report = "reports/$reportName"
         })
     }
 
     Start-Sleep -Seconds 12
     $perWorkbookSaves = [long]($SaveCount / 2)
-    $xlsxSettled = Invoke-ProbeUntilPassed -WorkbookPath $xlsx -ExpectedSequence $perWorkbookSaves -ExpectedValue ('EDT-SOAK-{0:D2}' -f ($SaveCount - 1)) -ExpectedKind 'LiteralChanged' -OutputName 'xlsx-settled.json'
-    $xlsmSettled = Invoke-ProbeUntilPassed -WorkbookPath $xlsm -ExpectedSequence $perWorkbookSaves -ExpectedValue ('EDT-SOAK-{0:D2}' -f $SaveCount) -ExpectedKind 'LiteralChanged' -OutputName 'xlsm-settled.json'
+    $xlsxSettled = Invoke-ProbeUntilPassed -WorkbookPath $xlsx -ExpectedSequence $perWorkbookSaves -ExpectedValue ('EDT-SOAK-{0:D2}' -f ($SaveCount - 1)) -ExpectedKind 'LiteralChanged' -ExpectedBeforeValue ('EDT-SOAK-{0:D2}' -f ($SaveCount - 3)) -OutputName 'xlsx-settled.json'
+    $xlsmSettled = Invoke-ProbeUntilPassed -WorkbookPath $xlsm -ExpectedSequence $perWorkbookSaves -ExpectedValue ('EDT-SOAK-{0:D2}' -f $SaveCount) -ExpectedKind 'LiteralChanged' -ExpectedBeforeValue ('EDT-SOAK-{0:D2}' -f ($SaveCount - 2)) -OutputName 'xlsm-settled.json'
     $macroHashAfter = Get-ZipEntrySha256 $xlsm 'xl/vbaProject.bin'
 
-    $durationSeconds = ([DateTime]::UtcNow - $scheduleStartedUtc).TotalSeconds
+    $scheduleClock.Stop()
+    $durationSeconds = $scheduleClock.Elapsed.TotalSeconds
     $xlsxHashes = @($saves | Where-Object format -eq 'xlsx' | Select-Object -ExpandProperty sha256 -Unique)
     $xlsmHashes = @($saves | Where-Object format -eq 'xlsm' | Select-Object -ExpandProperty sha256 -Unique)
     Assert-Soak 'twenty real saves span at least ten minutes' ($durationSeconds -ge 600) "$durationSeconds seconds"
@@ -313,6 +341,7 @@ finally {
         startedUtc = $startedUtc.ToString('O')
         finishedUtc = $finishedUtc.ToString('O')
         durationSeconds = [math]::Round(($finishedUtc - $startedUtc).TotalSeconds, 3)
+        monotonicDurationSeconds = if ($null -ne $scheduleClock) { [math]::Round($scheduleClock.Elapsed.TotalSeconds, 3) } else { 0 }
         saveCount = $SaveCount
         saveIntervalSeconds = $SaveIntervalSeconds
         candidate = [ordered]@{
@@ -332,7 +361,7 @@ finally {
     [System.IO.File]::WriteAllText($resultPath, ($result | ConvertTo-Json -Depth 12), [System.Text.UTF8Encoding]::new($false))
 }
 
-if ($failed -or @($assertions | Where-Object { -not $_.passed }).Count -ne 0) {
+if ($failed -or $saves.Count -ne $SaveCount -or $result.status -ne 'Passed' -or @($assertions | Where-Object { -not $_.passed }).Count -ne 0) {
     throw "REAL_EXCEL_SOAK_FAILED|$resultPath"
 }
 Write-Output "REAL_EXCEL_SOAK_PASS|$resultPath"

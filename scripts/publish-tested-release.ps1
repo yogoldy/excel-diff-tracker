@@ -1,18 +1,21 @@
 [CmdletBinding()]
 param(
     [ValidatePattern('^\d+\.\d+\.\d+$')]
-    [string]$Version = '0.1.1',
+    [string]$Version = '0.1.2',
     [string]$Repository = 'yogoldy/excel-diff-tracker',
     [string]$ReleaseDirectory,
     [Parameter(Mandatory = $true)]
     [string]$AcceptanceDirectory,
+    [string]$ProbePath,
     [switch]$Prerelease
 )
 
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 if (-not $ReleaseDirectory) { $ReleaseDirectory = Join-Path $repositoryRoot 'artifacts\release' }
+if (-not $ProbePath) { $ProbePath = Join-Path $repositoryRoot 'artifacts\acceptance-tools\win-arm64\ExcelDiffTracker.AcceptanceProbe.exe' }
 $ReleaseDirectory = (Resolve-Path $ReleaseDirectory).Path
+$ProbePath = (Resolve-Path $ProbePath).Path
 $installer = Join-Path $ReleaseDirectory 'ExcelDiffTracker-Setup-arm64.exe'
 $checksumFile = Join-Path $ReleaseDirectory 'SHA256SUMS.txt'
 $releaseNotes = Join-Path $repositoryRoot "docs\RELEASE_NOTES_$Version.md"
@@ -24,6 +27,8 @@ foreach ($required in @($installer, $checksumFile, $releaseNotes, $wingetManifes
 
 $actualHash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToUpperInvariant()
 $acceptanceDirectoryPath = (Resolve-Path $AcceptanceDirectory).Path
+$acceptanceValidator = Join-Path $repositoryRoot 'scripts\acceptance\Test-AcceptanceEvidence.ps1'
+$null = & $acceptanceValidator -AcceptanceDirectory $acceptanceDirectoryPath -InstallerPath $installer -ProbePath $ProbePath
 $approvalPath = Join-Path $acceptanceDirectoryPath 'approval.json'
 if (-not (Test-Path $approvalPath)) {
     throw 'Acceptance approval is missing. Run scripts\acceptance\Test-AcceptanceEvidence.ps1 first.'
@@ -31,6 +36,10 @@ if (-not (Test-Path $approvalPath)) {
 $approval = Get-Content $approvalPath -Raw | ConvertFrom-Json
 if ($approval.status -ne 'Approved' -or $approval.installerSha256.ToUpperInvariant() -ne $actualHash) {
     throw 'Acceptance approval does not approve this exact installer.'
+}
+$headCommit = (& git -C $repositoryRoot rev-parse HEAD).Trim()
+if ($LASTEXITCODE -ne 0 -or $approval.sourceCommit -ne $headCommit) {
+    throw 'Acceptance approval does not name the source commit being published.'
 }
 $checksumText = [System.IO.File]::ReadAllText($checksumFile)
 $manifestText = [System.IO.File]::ReadAllText($wingetManifest)
