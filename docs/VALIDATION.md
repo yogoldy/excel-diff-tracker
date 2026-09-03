@@ -1,5 +1,17 @@
 # Validation record
 
+## 0.2.0 local candidate and maintainer trial (2026-09-03 UTC)
+
+The frozen 0.2.0 build source is `845f20283182c5b529c74370918cef3419ca7631`. The candidate installer SHA-256 is `3562301F1EA6375A1726981A263E443BB794627755F1746304396D33167A2144`, and the application SHA-256 is `9244736A10ED36F38F4088A5DF6A6369DCC664417AE8D4FF62F3CD04C3A182CE`.
+
+- The source suite passed 30 tests.
+- Targeted minimum-size visual review passed.
+- Two independent Sol-medium reviews accepted the local candidate within their stated scope.
+- The maintainer installed and launched the candidate and positively assessed the redesigned visual hierarchy, workbook action menus, and compact/expanded views.
+- The prior and new processes were simultaneously active during the first launch. Optional legacy cleanup could not remove a locked SQLite write-ahead-log file and reported the failure. It did not touch a workbook or Markdown report.
+
+This establishes source-level checks, artifact identity, successful launch, selected visual acceptance, and safe cleanup failure. It does not establish clean replacement, reliable process handoff, complete legacy cleanup, sustained everyday use, or public-release qualification. The structured maintainer intake and a later stabilization pass remain required. Private installed-state evidence remains local and untracked.
+
 ## 0.1.2 existing-profile upgrade and sign-in (2026-09-03 UTC)
 
 Current phase: installed candidate entering maintainer-led everyday use. See [Project status](PROJECT_STATUS.md) for working preferences and next steps. Source through `3fb6304e6d95f0b1b83180d065f3e8be8ce5cfc7` is on `main`; this is not a published or fully qualified 0.1.2 release.

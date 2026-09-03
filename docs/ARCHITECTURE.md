@@ -2,6 +2,8 @@
 
 Excel Scenario Analysis Tool is a local, per-user Windows tray application built as separate testable projects. The existing `ExcelDiffTracker.*` namespaces remain internal implementation names in 0.2.0.
 
+This document describes implemented mechanics. Planned scenario recording, the thin Excel add-in, and downstream visualization integration are maintained separately in [Product roadmap](PRODUCT_ROADMAP.md).
+
 ## Components
 
 - `ExcelDiffTracker.Core` reads guarded Open XML packages into canonical workbook snapshots and computes exact semantic deltas.

@@ -6,7 +6,7 @@ Excel Scenario Analysis Tool quietly watches Excel workbooks, preserves readable
 
 Everything stays on your computer.
 
-Development status: 0.2.0 is an unqualified local candidate on the `excel-scenario-analysis-tool` branch. Version 0.1.2 remains the installed everyday-use baseline. No 0.2.0 public release is authorized. See [Project status](docs/PROJECT_STATUS.md) for the current state and [Validation](docs/VALIDATION.md) for completed historical checks.
+Development status: 0.2.0 is an unqualified local candidate on the `excel-scenario-analysis-tool` branch and has been installed for a maintainer trial. It has not yet replaced 0.1.2 as the proven everyday-use baseline, and no 0.2.0 public release is authorized. See [Project status](docs/PROJECT_STATUS.md) for the current state, [Product roadmap](docs/PRODUCT_ROADMAP.md) for planned direction, and [Validation](docs/VALIDATION.md) for completed checks.
 
 ## What it tracks
 
@@ -21,7 +21,7 @@ Version 0.2 intentionally ignores styles and colors, comments, charts, names, an
 
 ## Install
 
-No public 0.2.0 installer is currently approved. A local candidate build produces `ExcelScenarioAnalysisTool-Setup-arm64.exe`; it is self-contained and installs only for the current Windows user.
+No public 0.2.0 installer is currently approved. The local candidate installer is self-contained and installs only for the current Windows user. Its initial maintainer trial exposed an unresolved side-by-side process and legacy-cleanup issue; consult [Project status](docs/PROJECT_STATUS.md) before replacing an existing installation.
 
 The initial unsigned release can display a Windows “unknown publisher” or SmartScreen warning. Verify the installer against `SHA256SUMS.txt` from the same release before running it.
 
@@ -62,7 +62,7 @@ To produce the self-contained ARM64 application and installer, install Inno Setu
 .\scripts\build-release.ps1 -Version 0.2.0
 ```
 
-Architecture and test details are in [Architecture](docs/ARCHITECTURE.md) and [Testing](docs/TESTING.md). The build-once promotion process is documented in [Releasing](docs/RELEASING.md).
+Architecture and test details are in [Architecture](docs/ARCHITECTURE.md) and [Testing](docs/TESTING.md). Planned scenario recording, add-in, and downstream-integration work is separated in the [Product roadmap](docs/PRODUCT_ROADMAP.md). The build-once promotion process is documented in [Releasing](docs/RELEASING.md).
 
 ## License and trademarks
 
