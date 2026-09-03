@@ -6,6 +6,8 @@ Excel Diff Tracker quietly watches your Excel workbooks and writes a readable Ma
 
 Everything stays on your computer.
 
+Development status: 0.1.2 is installed for maintainer-led everyday use after successful upgrade and sign-in checks. Full release qualification remains incomplete. See [Project status](docs/PROJECT_STATUS.md) for the current state and [Validation](docs/VALIDATION.md) for completed checks.
+
 ## What it tracks
 
 - Cell values added, changed, or cleared

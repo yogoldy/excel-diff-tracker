@@ -1,12 +1,27 @@
 # Validation record
 
+## 0.1.2 existing-profile upgrade and sign-in (2026-09-03 UTC)
+
+Current phase: installed candidate entering maintainer-led everyday use. See [Project status](PROJECT_STATUS.md) for working preferences and next steps. Source through `3fb6304e6d95f0b1b83180d065f3e8be8ce5cfc7` is on `main`; this is not a published or fully qualified 0.1.2 release.
+
+- Frozen build: zero warnings/errors, 26/26 automated C# tests passed, 33 PowerShell files parsed, 112 isolated PowerShell regression checks passed, and 48 numeric palette contrast checks passed. Numeric contrast checks do not establish visual acceptance.
+- Candidate installer SHA-256: `9536373FCC47119D2C10A75C8E6D8F1BFC2BF38FDF08639DD27790D95422133A`.
+- Installed application SHA-256: `0518A0F02696D698F36F1118960557C805369B815A0941F0A5B75D8304A5D6D8`.
+- With the maintainer's authorization, the prior app exited through its tray menu and 499 installation/data files were backed up and hash-verified before upgrading the everyday profile.
+- Candidate installation exited successfully, preserved the database byte-for-byte, passed the single-file payload check, and corrected an existing startup entry that pointed to the wrong system-profile installation directory.
+- After the maintainer performed a real Windows sign-out/sign-in, a new candidate process was observed in the new session with `--background`, matching the frozen executable hash. No visible app window appeared before interaction. The tray reopened the app and History showed both existing versions.
+- Database integrity passed before and after the upgrade/sign-in. All nine tables retained identical full-row fingerprints, including the existing workbook, two versions, and one preexisting capture-error record. No new capture-error record was added during these checks.
+- Local evidence and backups are retained under `TestResults/release-preflight/`; personal data is not committed. No uninstall, clean-profile acceptance, or full installed semantic/recovery/performance matrix was performed in this session.
+
+These checks establish upgrade/history preservation and quiet startup on this existing profile. They do not establish sustained real-workflow capture reliability or satisfy the complete public-release gate. No release tag or public asset was created.
+
 ## 0.1.2 release preflight (2026-09-03 UTC)
 
 The continued audit found defects in prior-release UI selectors, PowerShell nullable/missing-property handling, populated-page accessibility, warning contrast, recovery semantic checks, benchmark heartbeat coverage, soak completion evidence, and executable identity coverage. The corresponding source/harness corrections have isolated regression coverage. The candidate application and AcceptanceProbe now publish as single-file executables including native dependencies so their hashes cover the executable payload.
 
-This work was performed on the user's everyday Windows VM. Its installed application, workbooks, history, startup settings, and sign-in session were not used for acceptance. Installed lifecycle/upgrade/uninstall, two clean critical-path runs, real Excel semantic/recovery/benchmark/soak runs, the complete visual matrix, explicit human visual approval, aggregate evidence validation, and final independent attestations remain outstanding. Source tests and a compiled installer do not approve release 0.1.2. No release tag or public asset should be created from this preflight alone.
+During the initial source preflight, the user's installed application and profile were not exercised. The subsequent authorized existing-profile checks are recorded above. Two clean critical-path runs, the full disposable lifecycle/upgrade/uninstall gate, real Excel semantic/recovery/benchmark/soak matrices, the complete visual matrix, explicit human visual approval, aggregate evidence validation, and final independent attestations remain outstanding. Source tests and a compiled installer do not approve release 0.1.2.
 
-Validation was performed on 2026-08-31 and finalized on 2026-09-01 in a Windows 11 ARM64 Parallels VM using .NET SDK 10.0.400 and runtime 10.0.11. The release candidate is a self-contained ARM64 application.
+The earlier 0.1.0/0.1.1 validation below was performed on 2026-08-31 and finalized on 2026-09-01 in a Windows 11 ARM64 Parallels VM using .NET SDK 10.0.400 and runtime 10.0.11.
 
 ## Initial 0.1.0 checks
 

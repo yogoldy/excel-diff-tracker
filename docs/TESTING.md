@@ -1,5 +1,7 @@
 # Testing
 
+For the current everyday-use phase and review preferences, see [Project status](PROJECT_STATUS.md). Use targeted checks for reported issues; do not repeat the full release workflow for routine feedback or documentation changes.
+
 ## Automated suite
 
 Run from a Windows checkout with the .NET 10 SDK:
@@ -42,6 +44,6 @@ Build the release, then run:
 
 Run this only in a clean test VM or Windows account with no existing Excel Diff Tracker installation. The script refuses to continue if the app is installed or running because it finishes by uninstalling the test copy. It performs a silent per-user install, verifies the self-contained payload and startup entry, launches the app with isolated first-run data, requires the onboarding window to open without a startup error, and silently uninstalls it. Existing history and reports are never read or changed.
 
-The exact release candidate has also been exercised with real Excel, a real macro-bearing workbook, a real password-encrypted workbook, and a generated 500,000-cell workbook on Windows 11 ARM64. See [VALIDATION.md](VALIDATION.md) for the recorded results.
+Earlier releases were exercised with real Excel, a real macro-bearing workbook, a real password-encrypted workbook, and a generated 500,000-cell workbook on Windows 11 ARM64. Those results do not qualify the current 0.1.2 candidate. See [VALIDATION.md](VALIDATION.md) for version-specific results.
 
 Manual visual acceptance remains necessary for onboarding, tray behavior, light/dark/system and high-contrast themes, keyboard navigation, text truncation, and 200% scaling. It was deliberately not automated through visual VM control.
