@@ -1,12 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
-  <title id="title">Excel Diff Tracker icon</title>
-  <desc id="desc">A workbook page with a small change-history dial</desc>
+  <title id="title">Excel Scenario Analysis Tool</title>
+  <desc id="desc">A worksheet grid branching into three scenario paths.</desc>
   <rect width="256" height="256" rx="58" fill="#287A68"/>
-  <path d="M61 40h99l35 35v139H61z" fill="#F9F7F1" stroke="#173D36" stroke-width="10" stroke-linejoin="round"/>
-  <path d="M160 40v35h35" fill="#CBE2DA" stroke="#173D36" stroke-width="10" stroke-linejoin="round"/>
-  <path d="M86 100h66M86 130h52M86 160h39" fill="none" stroke="#287A68" stroke-width="12" stroke-linecap="round"/>
-  <circle cx="171" cy="171" r="48" fill="#2D84AA" stroke="#173D36" stroke-width="10"/>
-  <path d="M171 143v30l21 13" fill="none" stroke="#FFF" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M132 153a48 48 0 0 1 21-24" fill="none" stroke="#FFF" stroke-width="9" stroke-linecap="round"/>
-  <path d="m135 137-3 16 16-3" fill="#FFF"/>
+  <g fill="none" stroke="#F7FBF9" stroke-width="11" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="42" y="47" width="92" height="162" rx="9"/>
+    <path d="M42 91h92M42 135h92M42 177h92M88 47v162" opacity=".76"/>
+    <path d="M111 135h28c21 0 28-43 50-43h23M139 135h73M139 135c21 0 28 43 50 43h23"/>
+  </g>
+  <g fill="#F7FBF9">
+    <circle cx="139" cy="135" r="10"/>
+    <circle cx="216" cy="92" r="12"/>
+    <circle cx="216" cy="135" r="12"/>
+    <circle cx="216" cy="178" r="12"/>
+  </g>
 </svg>

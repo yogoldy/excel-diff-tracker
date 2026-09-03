@@ -7,10 +7,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $installer = (Resolve-Path $InstallerPath).Path
-$installDirectory = Join-Path $env:LOCALAPPDATA 'Programs\Excel Diff Tracker'
-$application = Join-Path $installDirectory 'ExcelDiffTracker.exe'
+$installDirectory = Join-Path $env:LOCALAPPDATA 'Programs\Excel Scenario Analysis Tool'
+$application = Join-Path $installDirectory 'ExcelScenarioAnalysisTool.exe'
 $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
-$startMenuShortcut = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Excel Diff Tracker\Excel Diff Tracker.lnk'
+$startMenuShortcut = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Excel Scenario Analysis Tool\Excel Scenario Analysis Tool.lnk'
 $windowsSdkLicense = Join-Path $installDirectory 'licenses\dotnet\Microsoft-Windows-SDK-10.0.26100.57-License.rtf'
 $expectedWindowsSdkLicenseHash = 'DD07EB178E00C6BBA4148457FC00FF77CD4887EB521D504186FE59C9EC8BBE62'
 
@@ -18,11 +18,11 @@ if ($RequireNoDotnet -and (Get-Command dotnet -ErrorAction SilentlyContinue)) {
     throw 'dotnet is available on PATH; this run cannot prove a no-runtime installation.'
 }
 
-if (Get-Process ExcelDiffTracker -ErrorAction SilentlyContinue) {
-    throw 'Excel Diff Tracker is already running. Use a clean test VM or Windows account.'
+if (Get-Process ExcelScenarioAnalysisTool -ErrorAction SilentlyContinue) {
+    throw 'Excel Scenario Analysis Tool is already running. Use a clean test VM or Windows account.'
 }
 if (Test-Path $installDirectory) {
-    throw 'An existing Excel Diff Tracker installation was found. This test installs and uninstalls the app, so use a clean test VM or Windows account.'
+    throw 'An existing Excel Scenario Analysis Tool installation was found. This test installs and uninstalls the app, so use a clean test VM or Windows account.'
 }
 
 $installProcess = Start-Process -FilePath $installer -ArgumentList '/VERYSILENT', '/CURRENTUSER', '/SUPPRESSMSGBOXES', '/NORESTART', '/TASKS="startup"' -Wait -PassThru
@@ -34,8 +34,8 @@ if ((Get-FileHash $windowsSdkLicense -Algorithm SHA256).Hash -ne $expectedWindow
     throw 'The installed Windows SDK license did not match the approved source.'
 }
 
-$runValue = (Get-ItemProperty -Path $runKey -Name ExcelDiffTracker -ErrorAction Stop).ExcelDiffTracker
-if ($runValue -notmatch 'ExcelDiffTracker\.exe') { throw 'Startup registration is missing or invalid.' }
+$runValue = (Get-ItemProperty -Path $runKey -Name ExcelScenarioAnalysisTool -ErrorAction Stop).ExcelScenarioAnalysisTool
+if ($runValue -notmatch 'ExcelScenarioAnalysisTool\.exe') { throw 'Startup registration is missing or invalid.' }
 
 $testDataDirectory = Join-Path $env:TEMP "ExcelDiffTracker-InstallerSmoke-$([Guid]::NewGuid().ToString('N'))"
 $previousTestDataDirectory = $env:EXCEL_DIFF_TRACKER_TEST_DATA_DIRECTORY
@@ -53,7 +53,7 @@ try {
         $startupTitle = $applicationProcess.MainWindowTitle
     } while ([string]::IsNullOrWhiteSpace($startupTitle) -and [DateTime]::UtcNow -lt $deadline)
 
-    if ($startupTitle -ne 'Welcome to Excel Diff Tracker') {
+    if ($startupTitle -ne 'Welcome to Excel Scenario Analysis Tool') {
         throw "First-run onboarding did not open successfully. Visible window: '$startupTitle'."
     }
 }
@@ -75,7 +75,7 @@ if ($uninstallProcess.ExitCode -ne 0) { throw "Uninstaller exited with code $($u
 if (Test-Path $installDirectory) { throw 'The application directory remained after uninstall.' }
 if (Test-Path $startMenuShortcut) { throw 'The Start-menu shortcut remained after uninstall.' }
 
-$remainingRunValue = (Get-ItemProperty -Path $runKey -Name ExcelDiffTracker -ErrorAction SilentlyContinue).ExcelDiffTracker
+$remainingRunValue = (Get-ItemProperty -Path $runKey -Name ExcelScenarioAnalysisTool -ErrorAction SilentlyContinue).ExcelScenarioAnalysisTool
 if ($remainingRunValue) { throw 'The startup registration remained after uninstall.' }
 
 Write-Host 'INSTALLER_SMOKE_PASS'

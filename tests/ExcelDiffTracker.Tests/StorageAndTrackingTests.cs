@@ -66,6 +66,142 @@ public sealed class StorageAndTrackingTests
     }
 
     [Fact]
+    public async Task SelectedBaselineReconstructsHistoryWithoutRewritingChronologicalEvidence()
+    {
+        using var directory = new TestDirectory();
+        var workbookPath = Path.Combine(directory.Path, "scenario.xlsx");
+        var reports = Path.Combine(directory.Path, "reports");
+        var extractor = new WorkbookExtractor();
+        var differ = new WorkbookDiffer();
+        var store = new HistoryStore(Path.Combine(directory.Path, "history.db"));
+        await store.InitializeAsync();
+
+        WorkbookFixture.Create(workbookPath, false,
+            new FixtureSheet(1, "Sheet1", null,
+                new FixtureCell("A1", "1"),
+                new FixtureCell("B1", "2", "A1*2")));
+        var baselineSnapshot = extractor.Extract(workbookPath);
+        var tracked = await store.AddBaselineAsync(workbookPath, reports, Hash(workbookPath), File.GetLastWriteTimeUtc(workbookPath), baselineSnapshot);
+
+        WorkbookFixture.Create(workbookPath, false,
+            new FixtureSheet(1, "Sheet1", null,
+                new FixtureCell("A1", "2"),
+                new FixtureCell("B1", "4", "A1*2")),
+            new FixtureSheet(2, "Added", null, new FixtureCell("C1", "x", Type: CellValues.String)));
+        var firstSnapshot = extractor.Extract(workbookPath);
+        var firstReport = Path.Combine(reports, "first.md");
+        Directory.CreateDirectory(reports);
+        await File.WriteAllTextAsync(firstReport, "immutable first report");
+        var first = await store.CommitVersionAsync(
+            tracked,
+            firstSnapshot,
+            differ.Compare(baselineSnapshot, firstSnapshot),
+            Hash(workbookPath),
+            File.GetLastWriteTimeUtc(workbookPath),
+            firstReport,
+            "first");
+
+        tracked = (await store.GetTrackedWorkbookAsync(tracked.Id))!;
+        WorkbookFixture.Create(workbookPath, false,
+            new FixtureSheet(1, "Inputs", null,
+                new FixtureCell("A1", "3"),
+                new FixtureCell("B1", "9", "A1*3")));
+        var secondSnapshot = extractor.Extract(workbookPath);
+        var secondReport = Path.Combine(reports, "second.md");
+        await File.WriteAllTextAsync(secondReport, "immutable second report");
+        var second = await store.CommitVersionAsync(
+            tracked,
+            secondSnapshot,
+            differ.Compare(firstSnapshot, secondSnapshot),
+            Hash(workbookPath),
+            File.GetLastWriteTimeUtc(workbookPath),
+            secondReport,
+            "second");
+
+        tracked = (await store.GetTrackedWorkbookAsync(tracked.Id))!;
+        var scan0 = await store.LoadSnapshotAtSequenceAsync(tracked, 0);
+        var scan1 = await store.LoadSnapshotAtSequenceAsync(tracked, 1);
+        var scan2 = await store.LoadSnapshotAtSequenceAsync(tracked, 2);
+        Assert.Equal("1", scan0.Snapshot.Sheets[1].Cells["A1"].LiteralValue);
+        Assert.Equal("Sheet1", scan0.Snapshot.Sheets[1].Name);
+        Assert.False(scan0.Snapshot.Sheets.ContainsKey(2));
+        Assert.Equal("2", scan1.Snapshot.Sheets[1].Cells["A1"].LiteralValue);
+        Assert.Equal("A1*2", scan1.Snapshot.Sheets[1].Cells["B1"].FormulaText);
+        Assert.Equal("x", scan1.Snapshot.Sheets[2].Cells["C1"].LiteralValue);
+        Assert.Equal("Inputs", scan2.Snapshot.Sheets[1].Name);
+        Assert.Equal("A1*3", scan2.Snapshot.Sheets[1].Cells["B1"].FormulaText);
+
+        var firstBytes = await File.ReadAllBytesAsync(firstReport);
+        var secondBytes = await File.ReadAllBytesAsync(secondReport);
+        await using var coordinator = new TrackingCoordinator(store);
+        await coordinator.SetComparisonBaselineAsync(tracked.Id, ComparisonBaselineMode.FirstScan);
+        var fromOriginal = await coordinator.GetSelectedComparisonAsync(tracked.Id);
+        Assert.Equal(0, fromOriginal.Baseline.Sequence);
+        Assert.Equal(2, fromOriginal.Current.Sequence);
+        Assert.Contains(fromOriginal.Diff.SheetChanges, change => change.Kind == SheetChangeKind.Renamed);
+
+        await coordinator.SetComparisonBaselineAsync(tracked.Id, ComparisonBaselineMode.SpecificScan, first.Id);
+        var fromFirstSave = await coordinator.GetSelectedComparisonAsync(tracked.Id);
+        Assert.Equal(1, fromFirstSave.Baseline.Sequence);
+        Assert.Contains(fromFirstSave.Diff.SheetChanges, change => change.Kind == SheetChangeKind.Removed);
+        Assert.Contains(fromFirstSave.Diff.CellChanges, change => change.Address == "B1" && change.Kinds.Contains(CellChangeKind.FormulaChanged));
+
+        await coordinator.SetComparisonBaselineAsync(tracked.Id, ComparisonBaselineMode.Previous);
+        Assert.Equal(1, (await coordinator.GetSelectedComparisonAsync(tracked.Id)).Baseline.Sequence);
+        var derived = Path.Combine(reports, "derived.md");
+        await coordinator.ExportSelectedComparisonAsync(tracked.Id, derived);
+        var markdown = await File.ReadAllTextAsync(derived);
+        Assert.Contains("derived comparison view", markdown);
+        Assert.Contains("Baseline mode: Previous", markdown);
+        Assert.Contains($"Baseline SHA-256: `{second.PreviousSha256}`", markdown);
+        Assert.Equal(firstBytes, await File.ReadAllBytesAsync(firstReport));
+        Assert.Equal(secondBytes, await File.ReadAllBytesAsync(secondReport));
+
+        var collision = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            coordinator.ExportSelectedComparisonAsync(tracked.Id, firstReport));
+        Assert.Contains("automatic chronological report", collision.Message);
+        Assert.Equal(firstBytes, await File.ReadAllBytesAsync(firstReport));
+        Assert.Equal(secondBytes, await File.ReadAllBytesAsync(secondReport));
+    }
+
+    [Fact]
+    public async Task HistoricalReconstructionPreservesNoTrackedChangeScansAcrossRestart()
+    {
+        using var directory = new TestDirectory();
+        var workbookPath = Path.Combine(directory.Path, "style-only.xlsx");
+        var databasePath = Path.Combine(directory.Path, "history.db");
+        var reports = Path.Combine(directory.Path, "reports");
+        WorkbookFixture.Create(workbookPath, false, new FixtureSheet(1, "Sheet1", null, new FixtureCell("A1", "42", StyleIndex: 0)));
+        var extractor = new WorkbookExtractor();
+        var store = new HistoryStore(databasePath);
+        await store.InitializeAsync();
+        var baselineSnapshot = extractor.Extract(workbookPath);
+        var tracked = await store.AddBaselineAsync(workbookPath, reports, Hash(workbookPath), File.GetLastWriteTimeUtc(workbookPath), baselineSnapshot);
+
+        WorkbookFixture.Create(workbookPath, false, new FixtureSheet(1, "Sheet1", null, new FixtureCell("A1", "42", StyleIndex: 1)));
+        var styleOnlySnapshot = extractor.Extract(workbookPath);
+        var diff = new WorkbookDiffer().Compare(baselineSnapshot, styleOnlySnapshot);
+        Assert.False(diff.HasTrackedChanges);
+        var version = await store.CommitVersionAsync(
+            tracked,
+            styleOnlySnapshot,
+            diff,
+            Hash(workbookPath),
+            File.GetLastWriteTimeUtc(workbookPath),
+            Path.Combine(reports, "style-only.md"),
+            "No tracked changes");
+        await store.SetComparisonBaselineAsync(tracked.Id, ComparisonBaselineMode.SpecificScan, version.Id);
+
+        var reopened = new HistoryStore(databasePath);
+        await reopened.InitializeAsync();
+        tracked = (await reopened.GetTrackedWorkbookAsync(tracked.Id))!;
+        Assert.Equal(ComparisonBaselineMode.SpecificScan, tracked.ComparisonBaselineMode);
+        Assert.Equal(version.Id, tracked.SpecificBaselineVersionId);
+        Assert.Equal("42", (await reopened.LoadSnapshotAtSequenceAsync(tracked, 0)).Snapshot.Sheets[1].Cells["A1"].LiteralValue);
+        Assert.Equal("42", (await reopened.LoadSnapshotAtSequenceAsync(tracked, 1)).Snapshot.Sheets[1].Cells["A1"].LiteralValue);
+    }
+
+    [Fact]
     public async Task HybridCaptureWritesStyleOnlyReportDeduplicatesAndKeepsLastGoodBaselineOnCorruption()
     {
         using var directory = new TestDirectory();

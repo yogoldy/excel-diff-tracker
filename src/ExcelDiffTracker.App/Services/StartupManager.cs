@@ -5,7 +5,7 @@ namespace ExcelDiffTracker.App.Services;
 public sealed class StartupManager
 {
     private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    private const string ValueName = "ExcelDiffTracker";
+    private const string ValueName = "ExcelScenarioAnalysisTool";
 
     public bool IsEnabled
     {

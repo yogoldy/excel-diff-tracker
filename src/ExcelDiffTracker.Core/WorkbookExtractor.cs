@@ -6,7 +6,7 @@ using DocumentFormat.OpenXml.Spreadsheet;
 namespace ExcelDiffTracker.Core;
 
 // The extraction shape is adapted from xlsx-review (MIT), but narrowed to the
-// cell and sheet semantics required by Excel Diff Tracker.
+// cell and sheet semantics required by Excel Scenario Analysis Tool.
 public sealed class WorkbookExtractor
 {
     public WorkbookSnapshot Extract(string path)

@@ -2,9 +2,9 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:ExcelDiffTracker.App"
-        Title="Excel Diff Tracker" Width="1060" Height="720" MinWidth="760" MinHeight="520"
-        AutomationProperties.AutomationId="MainWindow" AutomationProperties.Name="Excel Diff Tracker"
-        WindowStartupLocation="CenterScreen" Closing="OnClosing">
+        Title="Excel Scenario Analysis Tool" Width="1180" Height="780" MinWidth="820" MinHeight="560"
+        AutomationProperties.AutomationId="MainWindow" AutomationProperties.Name="Excel Scenario Analysis Tool"
+        WindowStartupLocation="CenterScreen" Icon="app-icon.ico" Closing="OnClosing">
     <Window.Resources>
         <local:StringEqualsToVisibilityConverter x:Key="PageVisibility" />
         <local:BooleanToVisibilityConverter x:Key="BoolVisibility" />
@@ -13,47 +13,50 @@
         <local:UtcToLocalConverter x:Key="UtcToLocal" />
         <local:ToastBrushConverter x:Key="ToastBrush" />
         <local:ToastIconConverter x:Key="ToastIcon" />
+        <local:PathFileNameConverter x:Key="PathFileName" />
+        <local:PathDirectoryConverter x:Key="PathDirectory" />
     </Window.Resources>
 
     <Grid Background="{DynamicResource AppBackgroundBrush}">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="184" />
+            <ColumnDefinition Width="240" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
         <Border Grid.Column="0" Background="{DynamicResource SidebarBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
-            <Grid Margin="14,18,14,14">
+            <Grid Margin="18,22,18,18">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="14" />
                     <RowDefinition Height="*" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
-                <StackPanel Orientation="Horizontal">
-                    <Border Width="35" Height="35" Background="{DynamicResource AccentBrush}" CornerRadius="9">
-                        <Canvas Width="29" Height="29">
-                            <Path Stroke="{DynamicResource PrimaryForegroundBrush}" StrokeThickness="1.5" Data="M8,4 L19,4 L22,7 L22,22 L8,22 Z M18,4 L18,8 L22,8 M11,11 L18,11 M11,15 L16,15" />
-                            <Ellipse Canvas.Left="15" Canvas.Top="15" Width="10" Height="10" Fill="{DynamicResource AccentBrush}" Stroke="{DynamicResource PrimaryForegroundBrush}" StrokeThickness="1.5" />
-                            <Path Stroke="{DynamicResource PrimaryForegroundBrush}" StrokeThickness="1.4" Data="M20,17 L20,20 L22,21" />
+                <StackPanel Orientation="Horizontal" AutomationProperties.Name="Excel Scenario Analysis Tool">
+                    <Border Width="48" Height="48" Background="{DynamicResource AccentBrush}" CornerRadius="12">
+                        <Canvas Width="40" Height="40">
+                            <Path Stroke="{DynamicResource PrimaryForegroundBrush}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M5,7 L18,7 L18,33 L5,33 Z M5,15 L18,15 M5,24 L18,24 M11.5,7 L11.5,33 M15,20 L21,20 M21,20 L29,12 M21,20 L32,20 M21,20 L29,28" />
+                            <Ellipse Canvas.Left="27" Canvas.Top="9" Width="5" Height="5" Fill="{DynamicResource PrimaryForegroundBrush}" />
+                            <Ellipse Canvas.Left="30" Canvas.Top="17.5" Width="5" Height="5" Fill="{DynamicResource PrimaryForegroundBrush}" />
+                            <Ellipse Canvas.Left="27" Canvas.Top="25.5" Width="5" Height="5" Fill="{DynamicResource PrimaryForegroundBrush}" />
                         </Canvas>
                     </Border>
-                    <TextBlock Margin="10,0,0,0" VerticalAlignment="Center" FontWeight="SemiBold" FontSize="14" Text="Excel Diff&#x0a;Tracker" LineHeight="16" />
+                    <TextBlock Margin="12,0,0,0" VerticalAlignment="Center" FontFamily="Segoe UI Variable Display, Segoe UI" FontWeight="Bold" FontSize="18" Text="Scenario&#x0a;Analysis" LineHeight="20" />
                 </StackPanel>
 
                 <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <StackPanel>
-                        <Button Style="{StaticResource SidebarButton}" Command="{Binding NavigateCommand}" CommandParameter="Dashboard" Content="⌂  Dashboard" AutomationProperties.AutomationId="DashboardNavigationButton" AutomationProperties.Name="Dashboard" />
-                        <Button Style="{StaticResource SidebarButton}" Command="{Binding NavigateCommand}" CommandParameter="Workbooks" Content="▦  Workbooks" AutomationProperties.AutomationId="WorkbooksNavigationButton" AutomationProperties.Name="Workbooks" />
-                        <Button Style="{StaticResource SidebarButton}" Command="{Binding NavigateCommand}" CommandParameter="History" Content="↺  History" AutomationProperties.AutomationId="HistoryNavigationButton" AutomationProperties.Name="History" />
-                        <Button x:Name="SettingsNavigationButton" Style="{StaticResource SidebarButton}" Command="{Binding NavigateCommand}" CommandParameter="Settings" Content="⚙  Settings" AutomationProperties.AutomationId="SettingsNavigationButton" AutomationProperties.Name="Settings" />
-                        <Button Style="{StaticResource SidebarButton}" Command="{Binding NavigateCommand}" CommandParameter="About" Content="ⓘ  About" AutomationProperties.AutomationId="AboutNavigationButton" AutomationProperties.Name="About" />
+                        <Button Style="{StaticResource SidebarButton}" Command="{Binding NavigateCommand}" CommandParameter="Dashboard" Content="⌂   Dashboard" AutomationProperties.AutomationId="DashboardNavigationButton" AutomationProperties.Name="Dashboard" />
+                        <Button Style="{StaticResource SidebarButton}" Command="{Binding NavigateCommand}" CommandParameter="Workbooks" Content="▦   Workbooks" AutomationProperties.AutomationId="WorkbooksNavigationButton" AutomationProperties.Name="Workbooks" />
+                        <Button Style="{StaticResource SidebarButton}" Command="{Binding NavigateCommand}" CommandParameter="History" Content="↺   History" AutomationProperties.AutomationId="HistoryNavigationButton" AutomationProperties.Name="History" />
+                        <Button x:Name="SettingsNavigationButton" Style="{StaticResource SidebarButton}" Command="{Binding NavigateCommand}" CommandParameter="Settings" Content="⚙   Settings" AutomationProperties.AutomationId="SettingsNavigationButton" AutomationProperties.Name="Settings" />
+                        <Button Style="{StaticResource SidebarButton}" Command="{Binding NavigateCommand}" CommandParameter="About" Content="ⓘ   About" AutomationProperties.AutomationId="AboutNavigationButton" AutomationProperties.Name="About" />
                     </StackPanel>
                 </ScrollViewer>
 
                 <Border Grid.Row="3" Background="{DynamicResource AccentSoftBrush}" CornerRadius="8" Padding="10" AutomationProperties.AutomationId="LocalOnlyNotice">
                     <StackPanel>
-                        <TextBlock FontSize="12" FontWeight="SemiBold" Text="● LOCAL ONLY" Foreground="{DynamicResource AccentBrush}" />
-                        <TextBlock Margin="0,4,0,0" Style="{StaticResource MutedText}" FontSize="11" Text="No cloud, account, or telemetry." />
+                        <TextBlock FontSize="14" FontWeight="SemiBold" Text="● LOCAL ONLY" Foreground="{DynamicResource AccentBrush}" />
+                        <TextBlock Margin="0,5,0,0" Style="{StaticResource MutedText}" Text="No cloud, AI, account, or telemetry." />
                     </StackPanel>
                 </Border>
             </Grid>
@@ -73,28 +76,24 @@
                     </Grid>
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                         <ItemsControl x:Name="DashboardWorkbooks" ItemsSource="{Binding Workbooks}">
-                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Style="{StaticResource Card}" Width="315" MinHeight="190" Margin="0,0,14,14">
+                                    <Border Style="{StaticResource Card}" Margin="0,0,0,12">
                                         <Grid>
-                                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                                            <DockPanel>
-                                                <TextBlock FontWeight="SemiBold" FontSize="16" Text="{Binding Path}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}" AutomationProperties.HelpText="{Binding Path}" MaxWidth="205" />
-                                                <Border DockPanel.Dock="Right" Background="{DynamicResource AccentSoftBrush}" CornerRadius="9" Padding="7,3">
-                                                    <StackPanel Orientation="Horizontal">
-                                                        <Ellipse Width="7" Height="7" Margin="0,0,5,0" Fill="{Binding Status, Converter={StaticResource StatusBrush}}" />
-                                                        <TextBlock FontSize="11" Text="{Binding Status}" />
-                                                    </StackPanel>
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                            <StackPanel Margin="0,0,18,0">
+                                                <TextBlock FontWeight="SemiBold" FontSize="18" Text="{Binding FileName}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}" AutomationProperties.Name="{Binding FileName}" AutomationProperties.HelpText="{Binding Path}" />
+                                                <TextBlock Margin="0,4,0,0" Style="{StaticResource MutedText}" Text="{Binding Directory}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}" AutomationProperties.HelpText="{Binding Path}" />
+                                                <TextBlock Margin="0,11,0,0" Text="{Binding ComparisonSummary}" />
+                                                <TextBlock Margin="0,5,0,0" Style="{StaticResource MutedText}" Text="{Binding ComparisonBaselineLabel, StringFormat=Baseline: {0}}" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1" MinWidth="168" HorizontalAlignment="Right">
+                                                <Border HorizontalAlignment="Right" Background="{DynamicResource AccentSoftBrush}" CornerRadius="10" Padding="9,5">
+                                                    <StackPanel Orientation="Horizontal"><Ellipse Width="8" Height="8" Margin="0,0,7,0" Fill="{Binding Status, Converter={StaticResource StatusBrush}}"/><TextBlock FontSize="14" FontWeight="SemiBold" Text="{Binding Status}"/></StackPanel>
                                                 </Border>
-                                            </DockPanel>
-                                            <TextBlock Grid.Row="1" Margin="0,12,0,0" Style="{StaticResource MutedText}" Text="{Binding LastSummary, TargetNullValue=Baseline ready}" />
-                                            <Grid Grid.Row="2" Margin="0,16,0,16">
-                                                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
-                                                <StackPanel><TextBlock Style="{StaticResource MutedText}" Text="VERSIONS" FontSize="10"/><TextBlock FontSize="20" FontWeight="SemiBold" Text="{Binding CurrentSequence}" /></StackPanel>
-                                                <StackPanel Grid.Column="1"><TextBlock Style="{StaticResource MutedText}" Text="LAST CAPTURE" FontSize="10"/><TextBlock Text="{Binding LastSuccessfulCaptureUtc, Converter={StaticResource UtcToLocal}}" TextTrimming="CharacterEllipsis" /></StackPanel>
-                                            </Grid>
-                                            <Button Grid.Row="3" HorizontalAlignment="Left" Style="{StaticResource SecondaryButton}" Command="{Binding DataContext.ToggleTrackingCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="{Binding IsEnabled, Converter={StaticResource TrackingAction}}" AutomationProperties.AutomationId="{Binding Id, StringFormat=DashboardToggleTracking_{0}}" />
+                                                <TextBlock Margin="0,12,0,0" HorizontalAlignment="Right" Style="{StaticResource MutedText}" Text="{Binding CurrentSequence, StringFormat=Scan {0}}"/>
+                                                <Button Margin="0,10,0,0" HorizontalAlignment="Right" Style="{StaticResource SecondaryButton}" Command="{Binding DataContext.ToggleTrackingCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="{Binding IsEnabled, Converter={StaticResource TrackingAction}}" AutomationProperties.AutomationId="{Binding Id, StringFormat=DashboardToggleTracking_{0}}" />
+                                            </StackPanel>
                                         </Grid>
                                     </Border>
                                 </DataTemplate>
@@ -106,25 +105,50 @@
                 <Grid Visibility="{Binding CurrentPage, Converter={StaticResource PageVisibility}, ConverterParameter=Workbooks}" AutomationProperties.AutomationId="WorkbooksPage">
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
                     <Grid Margin="0,0,0,20">
-                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                         <StackPanel Margin="0,0,16,0"><TextBlock Style="{StaticResource PageTitle}" Text="Workbooks" AutomationProperties.AutomationId="WorkbooksHeading"/><TextBlock Style="{StaticResource MutedText}" Text="Pause tracking without deleting history, or permanently purge it separately."/></StackPanel>
-                        <Button Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource PrimaryButton}" Command="{Binding AddWorkbookCommand}" Content="＋ Add workbook" AutomationProperties.AutomationId="WorkbooksAddWorkbookButton" AutomationProperties.Name="Add workbook" />
+                        <ToggleButton Grid.Column="1" Margin="0,0,10,0" VerticalAlignment="Center" Style="{StaticResource SecondaryToggle}" IsChecked="{Binding WorkbooksExpanded}" Content="Expanded view" AutomationProperties.AutomationId="WorkbooksExpandedToggle" AutomationProperties.Name="Toggle expanded workbook view" />
+                        <Button Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource PrimaryButton}" Command="{Binding AddWorkbookCommand}" Content="＋ Add workbook" AutomationProperties.AutomationId="WorkbooksAddWorkbookButton" AutomationProperties.Name="Add workbook" />
                     </Grid>
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <ItemsControl x:Name="WorkbookRows" ItemsSource="{Binding Workbooks}">
                         <ItemsControl.ItemTemplate><DataTemplate>
-                            <Border Style="{StaticResource Card}" Margin="0,0,0,10">
-                                <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                                    <StackPanel>
-                                        <TextBlock FontWeight="SemiBold" FontSize="16" Text="{Binding Path}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}" AutomationProperties.HelpText="{Binding Path}" />
-                                        <TextBlock Margin="0,5,0,0" Style="{StaticResource MutedText}" Text="{Binding ReportDirectory, StringFormat=Reports: {0}}" TextTrimming="CharacterEllipsis" ToolTip="{Binding ReportDirectory}" AutomationProperties.HelpText="{Binding ReportDirectory}" />
-                                        <TextBlock Margin="0,5,0,0" Style="{StaticResource MutedText}" Text="{Binding LastSummary}" />
-                                        <TextBlock Margin="0,5,0,0" Foreground="{DynamicResource ErrorBrush}" Text="{Binding LastError}" />
+                            <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+                                <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <StackPanel Margin="0,0,16,0">
+                                        <TextBlock FontWeight="SemiBold" FontSize="18" Text="{Binding FileName}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}" AutomationProperties.Name="{Binding FileName}" AutomationProperties.HelpText="{Binding Path}" />
+                                        <TextBlock Margin="0,4,0,0" Style="{StaticResource MutedText}" Text="{Binding Directory}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}" AutomationProperties.HelpText="{Binding Path}" />
+                                        <TextBlock Margin="0,10,0,0" Text="{Binding ComparisonSummary}" />
+                                        <TextBlock Margin="0,4,0,0" Style="{StaticResource MutedText}" Text="{Binding ComparisonBaselineLabel, StringFormat=Baseline: {0}}" />
+                                        <StackPanel Margin="0,10,0,0" Visibility="{Binding DataContext.WorkbooksExpanded, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolVisibility}}">
+                                            <TextBlock Style="{StaticResource MutedText}" Text="{Binding ReportDirectory, StringFormat=Reports: {0}}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip="{Binding ReportDirectory}" AutomationProperties.HelpText="{Binding ReportDirectory}" />
+                                            <TextBlock Margin="0,4,0,0" Style="{StaticResource MutedText}" Text="{Binding LastSummary}" />
+                                            <TextBlock Margin="0,4,0,0" Foreground="{DynamicResource ErrorBrush}" Text="{Binding LastError}" />
+                                        </StackPanel>
                                     </StackPanel>
-                                    <WrapPanel Grid.Row="1" Margin="0,14,0,0" VerticalAlignment="Center">
-                                        <Button Margin="0,0,8,0" Style="{StaticResource SecondaryButton}" Command="{Binding DataContext.ToggleTrackingCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="{Binding IsEnabled, Converter={StaticResource TrackingAction}}" AutomationProperties.AutomationId="{Binding Id, StringFormat=WorkbookToggleTracking_{0}}" />
-                                        <Button Margin="0,0,8,0" Style="{StaticResource SecondaryButton}" Command="{Binding DataContext.ChangeWorkbookReportFolderCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="Report folder…" AutomationProperties.AutomationId="{Binding Id, StringFormat=WorkbookReportFolder_{0}}" />
-                                        <Button Background="Transparent" Foreground="{DynamicResource ErrorBrush}" BorderBrush="{DynamicResource BorderBrush}" Padding="12,8" Command="{Binding DataContext.PurgeCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="Purge…" AutomationProperties.AutomationId="{Binding Id, StringFormat=WorkbookPurge_{0}}" />
+                                    <Button Grid.Column="1" Width="44" Height="44" Padding="0" VerticalAlignment="Top" Style="{StaticResource SecondaryButton}" Content="•••" FontWeight="Bold" Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}" Click="OnMoreMenuClick" AutomationProperties.AutomationId="{Binding Id, StringFormat=WorkbookMore_{0}}" AutomationProperties.Name="Workbook actions">
+                                        <Button.ContextMenu><ContextMenu Background="{DynamicResource CardBrush}" Foreground="{DynamicResource TextBrush}">
+                                            <MenuItem Header="{Binding PlacementTarget.DataContext.IsEnabled, RelativeSource={RelativeSource AncestorType=ContextMenu}, Converter={StaticResource TrackingAction}}" Command="{Binding PlacementTarget.Tag.ToggleTrackingCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" AutomationProperties.AutomationId="{Binding PlacementTarget.DataContext.Id, RelativeSource={RelativeSource AncestorType=ContextMenu}, StringFormat=WorkbookMenuToggle_{0}}" />
+                                            <MenuItem Header="Show workbook in File Explorer" Command="{Binding PlacementTarget.Tag.ShowWorkbookInExplorerCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" AutomationProperties.AutomationId="{Binding PlacementTarget.DataContext.Id, RelativeSource={RelativeSource AncestorType=ContextMenu}, StringFormat=WorkbookMenuShowExplorer_{0}}" />
+                                            <MenuItem Header="Copy workbook path" Command="{Binding PlacementTarget.Tag.CopyWorkbookPathCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" AutomationProperties.AutomationId="{Binding PlacementTarget.DataContext.Id, RelativeSource={RelativeSource AncestorType=ContextMenu}, StringFormat=WorkbookMenuCopyPath_{0}}" />
+                                            <Separator/>
+                                            <MenuItem Header="Open reports folder" Command="{Binding PlacementTarget.Tag.OpenReportsFolderCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" AutomationProperties.AutomationId="{Binding PlacementTarget.DataContext.Id, RelativeSource={RelativeSource AncestorType=ContextMenu}, StringFormat=WorkbookMenuReports_{0}}" />
+                                            <MenuItem Header="Change reports folder…" Command="{Binding PlacementTarget.Tag.ChangeWorkbookReportFolderCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" AutomationProperties.AutomationId="{Binding PlacementTarget.DataContext.Id, RelativeSource={RelativeSource AncestorType=ContextMenu}, StringFormat=WorkbookMenuChangeReports_{0}}" />
+                                            <MenuItem Header="Comparison baseline">
+                                                <MenuItem Header="Always previous save" Command="{Binding PlacementTarget.Tag.SetPreviousBaselineCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" AutomationProperties.AutomationId="{Binding PlacementTarget.DataContext.Id, RelativeSource={RelativeSource AncestorType=ContextMenu}, StringFormat=WorkbookMenuBaselinePrevious_{0}}" />
+                                                <MenuItem Header="Original baseline (scan 0)" Command="{Binding PlacementTarget.Tag.SetFirstBaselineCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" AutomationProperties.AutomationId="{Binding PlacementTarget.DataContext.Id, RelativeSource={RelativeSource AncestorType=ContextMenu}, StringFormat=WorkbookMenuBaselineFirst_{0}}" />
+                                                <MenuItem Header="Choose a saved scan…" Command="{Binding PlacementTarget.Tag.ChooseBaselineFromHistoryCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" AutomationProperties.AutomationId="{Binding PlacementTarget.DataContext.Id, RelativeSource={RelativeSource AncestorType=ContextMenu}, StringFormat=WorkbookMenuBaselineCustom_{0}}" />
+                                            </MenuItem>
+                                            <MenuItem Header="Export selected-baseline comparison…" Command="{Binding PlacementTarget.Tag.ExportComparisonCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" AutomationProperties.AutomationId="{Binding PlacementTarget.DataContext.Id, RelativeSource={RelativeSource AncestorType=ContextMenu}, StringFormat=WorkbookMenuExportComparison_{0}}" />
+                                            <Separator/>
+                                            <MenuItem Header="Permanently purge history…" Foreground="{DynamicResource ErrorBrush}" Command="{Binding PlacementTarget.Tag.PurgeCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" AutomationProperties.AutomationId="{Binding PlacementTarget.DataContext.Id, RelativeSource={RelativeSource AncestorType=ContextMenu}, StringFormat=WorkbookMenuPurge_{0}}" />
+                                        </ContextMenu></Button.ContextMenu>
+                                    </Button>
+                                    <WrapPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="0,14,0,0" Visibility="{Binding DataContext.WorkbooksExpanded, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolVisibility}}">
+                                        <Button Margin="0,0,8,8" Style="{StaticResource SecondaryButton}" Command="{Binding DataContext.ToggleTrackingCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="{Binding IsEnabled, Converter={StaticResource TrackingAction}}" AutomationProperties.AutomationId="{Binding Id, StringFormat=WorkbookToggleTracking_{0}}" />
+                                        <Button Margin="0,0,8,8" Style="{StaticResource SecondaryButton}" Command="{Binding DataContext.ShowWorkbookInExplorerCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="Show in Explorer" AutomationProperties.AutomationId="{Binding Id, StringFormat=WorkbookShowExplorer_{0}}" />
+                                        <Button Margin="0,0,8,8" Style="{StaticResource SecondaryButton}" Command="{Binding DataContext.CopyWorkbookPathCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="Copy path" AutomationProperties.AutomationId="{Binding Id, StringFormat=WorkbookCopyPath_{0}}" />
+                                        <Button Margin="0,0,8,8" Style="{StaticResource SecondaryButton}" Command="{Binding DataContext.ExportComparisonCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="Export comparison" AutomationProperties.AutomationId="{Binding Id, StringFormat=WorkbookExportComparison_{0}}" />
                                     </WrapPanel>
                                 </Grid>
                             </Border>
@@ -135,7 +159,7 @@
 
                 <Grid Visibility="{Binding CurrentPage, Converter={StaticResource PageVisibility}, ConverterParameter=History}" AutomationProperties.AutomationId="HistoryPage">
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                    <StackPanel Margin="0,0,0,16"><TextBlock Style="{StaticResource PageTitle}" Text="History" AutomationProperties.AutomationId="HistoryHeading"/><TextBlock Style="{StaticResource MutedText}" Text="Every distinct post-baseline save, including saves with no tracked changes."/></StackPanel>
+                    <Grid Margin="0,0,0,16"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel Margin="0,0,16,0"><TextBlock Style="{StaticResource PageTitle}" Text="History" AutomationProperties.AutomationId="HistoryHeading"/><TextBlock Style="{StaticResource MutedText}" Text="Every distinct post-baseline save, including saves with no tracked changes."/></StackPanel><ToggleButton Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource SecondaryToggle}" IsChecked="{Binding HistoryExpanded}" Content="Expanded view" AutomationProperties.AutomationId="HistoryExpandedToggle" AutomationProperties.Name="Toggle expanded history view" /></Grid>
                     <Border Grid.Row="1" Style="{StaticResource Card}" Padding="12" Margin="0,0,0,14">
                         <WrapPanel VerticalAlignment="Center">
                             <TextBlock Margin="0,5,12,0" FontWeight="SemiBold" Text="Filters"/>
@@ -150,16 +174,35 @@
                                     <Border Style="{StaticResource Card}" Margin="0,0,0,10">
                                         <Grid>
                                             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                             <Border Width="38" Height="38" CornerRadius="19" Background="{DynamicResource AccentSoftBrush}"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource AccentBrush}" FontWeight="Bold" Text="↺"/></Border>
                                             <StackPanel Grid.Column="1" Margin="14,0">
-                                                <TextBlock FontWeight="SemiBold" Text="{Binding WorkbookPath}" TextTrimming="CharacterEllipsis" ToolTip="{Binding WorkbookPath}" AutomationProperties.HelpText="{Binding WorkbookPath}" />
+                                                <TextBlock FontWeight="SemiBold" FontSize="17" Text="{Binding WorkbookPath, Converter={StaticResource PathFileName}}" TextTrimming="CharacterEllipsis" ToolTip="{Binding WorkbookPath}" AutomationProperties.HelpText="{Binding WorkbookPath}" />
                                                 <TextBlock Margin="0,3,0,0" Style="{StaticResource MutedText}" Text="{Binding Summary}" />
-                                                <TextBlock Margin="0,3,0,0" Style="{StaticResource MutedText}"><Run Text="Version "/><Run Text="{Binding Sequence, Mode=OneWay}"/><Run Text="  •  "/><Run Text="{Binding CapturedUtc, Mode=OneWay, Converter={StaticResource UtcToLocal}}"/></TextBlock>
+                                                <TextBlock Margin="0,3,0,0" Style="{StaticResource MutedText}"><Run Text="Scan "/><Run Text="{Binding Sequence, Mode=OneWay}"/><Run Text="  •  "/><Run Text="{Binding CapturedUtc, Mode=OneWay, Converter={StaticResource UtcToLocal}}"/></TextBlock>
+                                                <StackPanel Margin="0,8,0,0" Visibility="{Binding DataContext.HistoryExpanded, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolVisibility}}">
+                                                    <TextBlock Style="{StaticResource MutedText}" Text="{Binding WorkbookPath}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ToolTip="{Binding WorkbookPath}"/>
+                                                    <TextBlock Margin="0,3,0,0" Style="{StaticResource MutedText}" Text="{Binding PreviousSha256, StringFormat=Previous hash: {0}}" TextTrimming="CharacterEllipsis"/>
+                                                    <TextBlock Margin="0,3,0,0" Style="{StaticResource MutedText}" Text="{Binding Sha256, StringFormat=Current hash: {0}}" TextTrimming="CharacterEllipsis"/>
+                                                    <TextBlock Margin="0,3,0,0" Style="{StaticResource MutedText}" Text="{Binding ReportPath, StringFormat=Report: {0}}" TextTrimming="CharacterEllipsis" ToolTip="{Binding ReportPath}"/>
+                                                </StackPanel>
                                             </StackPanel>
-                                            <WrapPanel Grid.Row="1" Grid.Column="1" Margin="14,12,0,0" VerticalAlignment="Center">
-                                                <Button Margin="0,0,8,0" Style="{StaticResource SecondaryButton}" Command="{Binding DataContext.OpenReportCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="Open" AutomationProperties.AutomationId="{Binding Id, StringFormat=HistoryOpenReport_{0}}"/>
-                                                <Button Style="{StaticResource SecondaryButton}" Command="{Binding DataContext.ExportFullCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="Full export" AutomationProperties.AutomationId="{Binding Id, StringFormat=HistoryFullExport_{0}}"/>
+                                            <Button Grid.Column="2" Width="44" Height="44" Padding="0" Style="{StaticResource SecondaryButton}" Content="•••" FontWeight="Bold" Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}" Click="OnMoreMenuClick" AutomationProperties.AutomationId="{Binding Id, StringFormat=HistoryMore_{0}}" AutomationProperties.Name="Saved scan actions">
+                                                <Button.ContextMenu><ContextMenu Background="{DynamicResource CardBrush}" Foreground="{DynamicResource TextBrush}">
+                                                    <MenuItem Header="Open report" Command="{Binding PlacementTarget.Tag.OpenReportCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" AutomationProperties.AutomationId="{Binding PlacementTarget.DataContext.Id, RelativeSource={RelativeSource AncestorType=ContextMenu}, StringFormat=HistoryMenuOpen_{0}}"/>
+                                                    <MenuItem Header="Show report in File Explorer" Command="{Binding PlacementTarget.Tag.ShowReportInExplorerCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" AutomationProperties.AutomationId="{Binding PlacementTarget.DataContext.Id, RelativeSource={RelativeSource AncestorType=ContextMenu}, StringFormat=HistoryMenuShowExplorer_{0}}"/>
+                                                    <MenuItem Header="Copy report path" Command="{Binding PlacementTarget.Tag.CopyReportPathCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" AutomationProperties.AutomationId="{Binding PlacementTarget.DataContext.Id, RelativeSource={RelativeSource AncestorType=ContextMenu}, StringFormat=HistoryMenuCopyPath_{0}}"/>
+                                                    <Separator/>
+                                                    <MenuItem Header="Export full chronological report…" Command="{Binding PlacementTarget.Tag.ExportFullCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" AutomationProperties.AutomationId="{Binding PlacementTarget.DataContext.Id, RelativeSource={RelativeSource AncestorType=ContextMenu}, StringFormat=HistoryMenuExportFull_{0}}"/>
+                                                    <MenuItem Header="Export selected-baseline comparison…" Command="{Binding PlacementTarget.Tag.ExportComparisonCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" AutomationProperties.AutomationId="{Binding PlacementTarget.DataContext.Id, RelativeSource={RelativeSource AncestorType=ContextMenu}, StringFormat=HistoryMenuExportComparison_{0}}"/>
+                                                    <MenuItem Header="Use this scan as baseline" Command="{Binding PlacementTarget.Tag.UseScanAsBaselineCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" AutomationProperties.AutomationId="{Binding PlacementTarget.DataContext.Id, RelativeSource={RelativeSource AncestorType=ContextMenu}, StringFormat=HistoryMenuUseBaseline_{0}}"/>
+                                                </ContextMenu></Button.ContextMenu>
+                                            </Button>
+                                            <WrapPanel Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Margin="14,12,0,0" VerticalAlignment="Center" Visibility="{Binding DataContext.HistoryExpanded, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolVisibility}}">
+                                                <Button Margin="0,0,8,8" Style="{StaticResource SecondaryButton}" Command="{Binding DataContext.OpenReportCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="Open report" AutomationProperties.AutomationId="{Binding Id, StringFormat=HistoryOpenReport_{0}}"/>
+                                                <Button Margin="0,0,8,8" Style="{StaticResource SecondaryButton}" Command="{Binding DataContext.ShowReportInExplorerCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="Show in Explorer" AutomationProperties.AutomationId="{Binding Id, StringFormat=HistoryShowExplorer_{0}}"/>
+                                                <Button Margin="0,0,8,8" Style="{StaticResource SecondaryButton}" Command="{Binding DataContext.CopyReportPathCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="Copy path" AutomationProperties.AutomationId="{Binding Id, StringFormat=HistoryCopyPath_{0}}"/>
+                                                <Button Margin="0,0,8,8" Style="{StaticResource SecondaryButton}" Command="{Binding DataContext.ExportComparisonCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="Export comparison" AutomationProperties.AutomationId="{Binding Id, StringFormat=HistoryExportComparison_{0}}"/>
                                             </WrapPanel>
                                         </Grid>
                                     </Border>
@@ -184,7 +227,7 @@
                         <TextBlock Style="{StaticResource SectionTitle}" Text="General" Margin="2,0,0,8"/>
                         <Border Style="{StaticResource Card}" Padding="0">
                             <StackPanel>
-                                <Grid Margin="18,15"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel Margin="0,0,16,0"><TextBlock FontWeight="SemiBold" Text="Start with Windows"/><TextBlock Style="{StaticResource MutedText}" Text="Runs quietly in the tray for this Windows account."/></StackPanel><CheckBox Grid.Column="1" VerticalAlignment="Center" IsChecked="{Binding StartWithWindows}" Command="{Binding SaveStartupCommand}" AutomationProperties.AutomationId="StartWithWindowsCheckBox" AutomationProperties.Name="Start Excel Diff Tracker with Windows"/></Grid>
+                                <Grid Margin="18,15"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel Margin="0,0,16,0"><TextBlock FontWeight="SemiBold" Text="Start with Windows"/><TextBlock Style="{StaticResource MutedText}" Text="Runs quietly in the tray for this Windows account."/></StackPanel><CheckBox Grid.Column="1" VerticalAlignment="Center" IsChecked="{Binding StartWithWindows}" Command="{Binding SaveStartupCommand}" AutomationProperties.AutomationId="StartWithWindowsCheckBox" AutomationProperties.Name="Start Excel Scenario Analysis Tool with Windows"/></Grid>
                                 <Border Height="1" Background="{DynamicResource BorderBrush}"/>
                                 <Grid Margin="18,15"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel Margin="0,0,16,0"><TextBlock FontWeight="SemiBold" Text="Theme"/><TextBlock Style="{StaticResource MutedText}" Text="Light, dark, or follow Windows."/></StackPanel><ComboBox x:Name="ThemeComboBox" Grid.Column="1" Width="130" ItemsSource="{Binding Themes}" SelectedItem="{Binding SelectedTheme}" SelectionChanged="OnThemeChanged" AutomationProperties.AutomationId="ThemeComboBox" AutomationProperties.Name="Application theme"/></Grid>
                             </StackPanel>
@@ -194,19 +237,28 @@
                             <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel Margin="0,0,16,0"><TextBlock FontWeight="SemiBold" Text="Default report folder"/><TextBlock Margin="0,5,0,0" Style="{StaticResource MutedText}" Text="{Binding DefaultReportDirectory}" TextTrimming="CharacterEllipsis" ToolTip="{Binding DefaultReportDirectory}"/></StackPanel><Button Grid.Column="1" VerticalAlignment="Center" Style="{StaticResource SecondaryButton}" Command="{Binding ChooseDefaultReportFolderCommand}" Content="Choose…" AutomationProperties.AutomationId="ChooseDefaultReportFolderButton" AutomationProperties.Name="Choose default report folder"/></Grid>
                         </Border>
                         <TextBlock Style="{StaticResource SectionTitle}" Text="Watcher behavior" Margin="2,22,0,8"/>
-                        <Border Style="{StaticResource Card}"><StackPanel><TextBlock FontWeight="SemiBold" Text="Balanced reliability"/><TextBlock Margin="0,5,0,0" Style="{StaticResource MutedText}" Text="File events are backed up by a 10-second reconciliation check. Locked saves retry for up to 60 seconds. Repeated hashes are ignored."/></StackPanel></Border>
+                        <Border Style="{StaticResource Card}"><StackPanel><TextBlock FontWeight="SemiBold" Text="Balanced reliability"/><TextBlock Margin="0,5,0,0" Style="{StaticResource MutedText}" Text="File events are backed up by a 10-second reconciliation check. Locked saves retry for up to 60 seconds. Repeated hashes are ignored. Comparison baselines change only the view; chronological captures remain immutable."/></StackPanel></Border>
                         <TextBlock Style="{StaticResource SectionTitle}" Text="Advanced maintenance" Margin="2,22,0,8"/>
-                        <Border Style="{StaticResource Card}"><StackPanel><TextBlock FontWeight="SemiBold" Text="History database"/><TextBlock Margin="0,5,0,0" Style="{StaticResource MutedText}" Text="%LocalAppData%\Excel Diff Tracker\history.db"/><TextBlock Margin="0,5,0,0" Style="{StaticResource MutedText}" Text="Stopping tracking retains data. Permanent deletion is available per workbook and always asks for confirmation."/></StackPanel></Border>
+                        <Border Style="{StaticResource Card}"><StackPanel><TextBlock FontWeight="SemiBold" Text="History database"/><TextBlock Margin="0,5,0,0" Style="{StaticResource MutedText}" Text="%LocalAppData%\Excel Scenario Analysis Tool\history.db"/><TextBlock Margin="0,5,0,0" Style="{StaticResource MutedText}" Text="Stopping tracking retains data. Permanent deletion is available per workbook and always asks for confirmation."/></StackPanel></Border>
                     </StackPanel></ScrollViewer>
                 </Grid>
 
                 <Grid Visibility="{Binding CurrentPage, Converter={StaticResource PageVisibility}, ConverterParameter=About}" AutomationProperties.AutomationId="AboutPage">
                     <ScrollViewer x:Name="AboutScrollViewer" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                    <StackPanel MaxWidth="650" HorizontalAlignment="Left">
-                        <TextBlock Style="{StaticResource PageTitle}" Text="About Excel Diff Tracker" AutomationProperties.AutomationId="AboutHeading"/>
-                        <TextBlock Style="{StaticResource MutedText}" Text="Private workbook change history for Windows 11 ARM64." Margin="0,0,0,22"/>
-                        <Border Style="{StaticResource Card}"><StackPanel><TextBlock Style="{StaticResource SectionTitle}" Text="Local by design"/><TextBlock Margin="0,10,0,0" Text="Workbook processing, SQLite history, and Markdown reports stay on this PC. There is no account, cloud service, AI, API, telemetry, or Excel add-in."/><TextBlock Margin="0,14,0,0" Style="{StaticResource MutedText}" Text="MIT licensed • Version 0.1.2"/></StackPanel></Border>
-                        <Border Style="{StaticResource Card}" Margin="0,14,0,0"><StackPanel><TextBlock Style="{StaticResource SectionTitle}" Text="What version 1 tracks"/><TextBlock Margin="0,10,0,0" Text="Values, exact stored formulas, calculated results, data types, and sheet structure. Styles, colors, comments, charts, and names are deliberately ignored."/></StackPanel></Border>
+                    <StackPanel MaxWidth="760" HorizontalAlignment="Stretch">
+                        <TextBlock Style="{StaticResource PageTitle}" Text="About Excel Scenario Analysis Tool" AutomationProperties.AutomationId="AboutHeading"/>
+                        <TextBlock Style="{StaticResource MutedText}" Text="Private workbook change evidence and selected-baseline comparisons." Margin="0,0,0,22"/>
+                        <Border Style="{StaticResource Card}"><StackPanel><TextBlock Style="{StaticResource SectionTitle}" Text="Local by design"/><TextBlock Margin="0,10,0,0" Text="Workbook processing, SQLite history, and Markdown reports stay on this PC. There is no account, cloud service, AI, API, telemetry, or Excel add-in."/></StackPanel></Border>
+                        <Border Style="{StaticResource Card}" Margin="0,14,0,0" Padding="0"><StackPanel>
+                            <Grid Margin="20,16"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock FontWeight="SemiBold" Text="Version"/><TextBlock Grid.Column="1" Text="{Binding AppVersion}"/></Grid>
+                            <Border Height="1" Background="{DynamicResource BorderBrush}"/>
+                            <Grid Margin="20,16"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock FontWeight="SemiBold" Text="Platform"/><TextBlock Grid.Column="1" Text="{Binding Platform}"/></Grid>
+                            <Border Height="1" Background="{DynamicResource BorderBrush}"/>
+                            <Grid Margin="20,16"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock FontWeight="SemiBold" Text="License"/><TextBlock Grid.Column="1" Text="MIT"/></Grid>
+                            <Border Height="1" Background="{DynamicResource BorderBrush}"/>
+                            <Grid Margin="20,16"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock FontWeight="SemiBold" Text="Support development"/><TextBlock Style="{StaticResource MutedText}" Text="Not available in this local build."/></StackPanel><Button Grid.Column="1" IsEnabled="False" MinWidth="110" Content="Donate" ToolTip="Donations are not available." AutomationProperties.AutomationId="DonateButton" AutomationProperties.Name="Donate unavailable"/></Grid>
+                        </StackPanel></Border>
+                        <Border Style="{StaticResource Card}" Margin="0,14,0,0"><StackPanel><TextBlock Style="{StaticResource SectionTitle}" Text="What 0.2 tracks"/><TextBlock Margin="0,10,0,0" Text="Values, exact stored formulas, calculated results, data types, and sheet structure. Styles, colors, comments, charts, and names are deliberately ignored. Baseline comparisons are derived views over immutable save-by-save evidence."/></StackPanel></Border>
                     </StackPanel>
                     </ScrollViewer>
                 </Grid>

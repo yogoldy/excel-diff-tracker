@@ -21,7 +21,8 @@
                 <Setter Property="Background" Value="{DynamicResource AppBackgroundBrush}" />
                 <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
                 <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI" />
-                <Setter Property="FontSize" Value="14" />
+                <Setter Property="FontSize" Value="16" />
+                <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
             </Style>
             <Style TargetType="TextBlock">
                 <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
@@ -29,15 +30,16 @@
             </Style>
             <Style x:Key="MutedText" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
                 <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
-                <Setter Property="FontSize" Value="13" />
+                <Setter Property="FontSize" Value="14" />
             </Style>
             <Style x:Key="PageTitle" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
-                <Setter Property="FontSize" Value="25" />
+                <Setter Property="FontFamily" Value="Segoe UI Variable Display, Segoe UI" />
+                <Setter Property="FontSize" Value="32" />
                 <Setter Property="FontWeight" Value="SemiBold" />
                 <Setter Property="Margin" Value="0,0,0,5" />
             </Style>
             <Style x:Key="SectionTitle" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
-                <Setter Property="FontSize" Value="16" />
+                <Setter Property="FontSize" Value="18" />
                 <Setter Property="FontWeight" Value="SemiBold" />
             </Style>
             <Style x:Key="Card" TargetType="Border">
@@ -45,13 +47,14 @@
                 <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
                 <Setter Property="BorderThickness" Value="1" />
                 <Setter Property="CornerRadius" Value="12" />
-                <Setter Property="Padding" Value="18" />
+                <Setter Property="Padding" Value="20" />
             </Style>
             <Style x:Key="PrimaryButton" TargetType="Button">
                 <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
                 <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}" />
                 <Setter Property="BorderThickness" Value="0" />
-                <Setter Property="Padding" Value="15,9" />
+                <Setter Property="Padding" Value="16,10" />
+                <Setter Property="MinHeight" Value="44" />
                 <Setter Property="Cursor" Value="Hand" />
                 <Setter Property="FontWeight" Value="SemiBold" />
                 <Setter Property="Template">
@@ -74,6 +77,16 @@
                 <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
                 <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
             </Style>
+            <Style x:Key="SecondaryToggle" TargetType="ToggleButton">
+                <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+                <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Padding" Value="14,9" />
+                <Setter Property="MinHeight" Value="44" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Cursor" Value="Hand" />
+            </Style>
             <Style x:Key="SidebarButton" TargetType="Button">
                 <Setter Property="HorizontalContentAlignment" Value="Left" />
                 <Setter Property="Background" Value="Transparent" />
@@ -82,6 +95,9 @@
                 <Setter Property="Padding" Value="12,10" />
                 <Setter Property="Margin" Value="0,2" />
                 <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="FontSize" Value="17" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="MinHeight" Value="46" />
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="Button">
@@ -95,6 +111,28 @@
                         </ControlTemplate>
                     </Setter.Value>
                 </Setter>
+            </Style>
+            <Style TargetType="ContextMenu">
+                <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+                <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Padding" Value="6" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ContextMenu">
+                            <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}">
+                                <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" />
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+            <Style TargetType="MenuItem">
+                <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI" />
+                <Setter Property="FontSize" Value="15" />
+                <Setter Property="Padding" Value="12,9" />
+                <Setter Property="MinHeight" Value="40" />
             </Style>
             <Style TargetType="TextBox">
                 <Setter Property="Background" Value="{DynamicResource CardBrush}" />

@@ -31,12 +31,16 @@ public sealed class ThemeManager : IDisposable
 
     private AppTheme _selected = AppTheme.System;
 
+    public event EventHandler? ThemeChanged;
+    public bool IsDark { get; private set; }
+
     public ThemeManager() => SystemEvents.UserPreferenceChanged += OnUserPreferenceChanged;
 
     public void Apply(AppTheme theme)
     {
         _selected = theme;
         var dark = theme == AppTheme.Dark || theme == AppTheme.System && IsSystemDark();
+        IsDark = dark;
         var colors = GetPalette(dark ? AppTheme.Dark : AppTheme.Light);
 
         if (SystemParameters.HighContrast)
@@ -53,11 +57,13 @@ public sealed class ThemeManager : IDisposable
             Application.Current.Resources["WarningBrush"] = SystemColors.WindowTextBrush;
             Application.Current.Resources["ErrorBrush"] = SystemColors.WindowTextBrush;
             Application.Current.Resources["PrimaryForegroundBrush"] = SystemColors.HighlightTextBrush;
+            ThemeChanged?.Invoke(this, EventArgs.Empty);
             return;
         }
 
         foreach (var (key, value) in colors)
             Application.Current.Resources[key] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(value));
+        ThemeChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public void Dispose() => SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;

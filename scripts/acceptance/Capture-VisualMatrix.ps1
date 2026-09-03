@@ -14,7 +14,7 @@ param(
     [string] $ExpectedWarningText,
     [string] $ExpectedStateText,
     [ValidateSet('tray-menu','toast','processing','warning','error','long-path')] [string] $StateName,
-    [string] $TargetWindowTitle = 'Excel Diff Tracker',
+    [string] $TargetWindowTitle = 'Excel Scenario Analysis Tool',
     [switch] $UseDesktopRoot,
     [switch] $WindowsContrastTheme
 )
@@ -140,11 +140,11 @@ function Get-PhysicalDisplayModes {
 }
 
 function Get-ProductProcess {
-    $processes = @(Get-Process -Name 'ExcelDiffTracker' -ErrorAction SilentlyContinue | Where-Object { -not $_.HasExited })
-    if ($processes.Count -ne 1) { throw "Expected exactly one running ExcelDiffTracker process, found $($processes.Count)." }
+    $processes = @(Get-Process -Name 'ExcelScenarioAnalysisTool' -ErrorAction SilentlyContinue | Where-Object { -not $_.HasExited })
+    if ($processes.Count -ne 1) { throw "Expected exactly one running ExcelScenarioAnalysisTool process, found $($processes.Count)." }
     $process = $processes[0]
     if ([string]::IsNullOrWhiteSpace($process.Path) -or -not (Test-Path $process.Path -PathType Leaf)) {
-        throw 'The installed ExcelDiffTracker process path could not be resolved.'
+        throw 'The installed ExcelScenarioAnalysisTool process path could not be resolved.'
     }
     $actualHash = Get-AcceptanceFileSha256 -Path $process.Path
     if ($actualHash -ne $expectedApplicationHash) { throw "Installed application hash mismatch. Expected $expectedApplicationHash, actual $actualHash." }
@@ -362,10 +362,10 @@ function Assert-RequiredControls {
 function Set-CaptureWindowSize {
     param([System.Windows.Automation.AutomationElement] $Window, [string] $Mode, [int] $Dpi)
     $handle = [IntPtr]$Window.Current.NativeWindowHandle; $screen = [System.Windows.Forms.Screen]::FromHandle($handle); $factor = $Dpi / 96.0
-    $isOnboarding = $Window.Current.Name -eq 'Welcome to Excel Diff Tracker'
+    $isOnboarding = $Window.Current.Name -eq 'Welcome to Excel Scenario Analysis Tool'
     $targetWidth = $null; $targetHeight = $null
     if ($Mode -eq 'Minimum') {
-        $logicalWidth = if ($isOnboarding) { 620 } else { 760 }; $logicalHeight = if ($isOnboarding) { 460 } else { 520 }
+        $logicalWidth = if ($isOnboarding) { 660 } else { 820 }; $logicalHeight = if ($isOnboarding) { 490 } else { 560 }
         $targetWidth = [int][Math]::Ceiling($logicalWidth * $factor); $targetHeight = [int][Math]::Ceiling($logicalHeight * $factor)
     } elseif ($Mode -eq 'Resized') { $targetWidth = [int][Math]::Floor($screen.WorkingArea.Width * 0.90); $targetHeight = [int][Math]::Floor($screen.WorkingArea.Height * 0.90) }
     if ($null -ne $targetWidth) {
@@ -416,7 +416,7 @@ function Assert-SelectedTheme {
 
 $product = Get-ProductProcess
 $null = & (Join-Path $PSScriptRoot 'Test-SingleFilePayload.ps1') -ExecutablePath $product.Path
-$initialTitle = if ($CapturePhase -eq 'Onboarding') { 'Welcome to Excel Diff Tracker' } else { 'Excel Diff Tracker' }
+$initialTitle = if ($CapturePhase -eq 'Onboarding') { 'Welcome to Excel Scenario Analysis Tool' } else { 'Excel Scenario Analysis Tool' }
 $referenceWindow = Find-UiaWindow -Title $initialTitle -ProcessId $product.Id -TimeoutSeconds 20
 $environment = Get-ActualEnvironment -ReferenceWindow $referenceWindow
 Assert-ExpectedEnvironment -Environment $environment
@@ -496,7 +496,7 @@ if ($CapturePhase -eq 'Onboarding') {
     if ([string]::IsNullOrWhiteSpace($WorkbookPath)) { throw '-WorkbookPath is mandatory for the onboarding visual phase.' }
     $resolvedWorkbook = (Resolve-Path $WorkbookPath).Path
     if ($resolvedWorkbook.Length -lt 80) { throw 'The onboarding fixture path must be at least 80 characters so long-path rendering is exercised.' }
-    $onboarding = Find-UiaWindow -Title 'Welcome to Excel Diff Tracker' -ProcessId $product.Id -TimeoutSeconds 20
+    $onboarding = Find-UiaWindow -Title 'Welcome to Excel Scenario Analysis Tool' -ProcessId $product.Id -TimeoutSeconds 20
     $nextControl = @{ OnboardingNextButton = @{ name = 'Continue setup'; role = 'ControlType.Button' } }
     Capture-State 'onboarding-step-1' 'onboarding' $onboarding 'Startup' $nextControl
     Invoke-UiaElement -Element (Find-UiaElement -Root $onboarding -AutomationId 'OnboardingNextButton'); Start-Sleep -Milliseconds 250
@@ -512,7 +512,7 @@ if ($CapturePhase -eq 'Onboarding') {
     $open = Find-UiaElement -Root $fileDialog -AutomationId '1' -Optional; if (-not $open) { $open = Find-UiaElement -Root $fileDialog -Name 'Open' }; Invoke-UiaElement -Element $open; Start-Sleep -Milliseconds 400
     $script:ExpectedLongPath = $resolvedWorkbook; Capture-State 'onboarding-step-3-long-path' 'long-path' $onboarding 'Startup' $step3 -RequireLongPath
     Invoke-UiaElement -Element (Find-UiaElement -Root $onboarding -AutomationId 'OnboardingNextButton'); Start-Sleep -Milliseconds 250
-    $step4 = @{ OnboardingNextButton = $nextControl.OnboardingNextButton; OnboardingBackButton = $step2.OnboardingBackButton; OnboardingStartWithWindowsCheckBox = @{ name = 'Start Excel Diff Tracker with Windows'; role = 'ControlType.CheckBox' }; OnboardingBeginTrackingCheckBox = @{ name = 'Begin tracking the selected workbook'; role = 'ControlType.CheckBox' } }
+    $step4 = @{ OnboardingNextButton = $nextControl.OnboardingNextButton; OnboardingBackButton = $step2.OnboardingBackButton; OnboardingStartWithWindowsCheckBox = @{ name = 'Start Excel Scenario Analysis Tool with Windows'; role = 'ControlType.CheckBox' }; OnboardingBeginTrackingCheckBox = @{ name = 'Begin tracking the selected workbook'; role = 'ControlType.CheckBox' } }
     Capture-State 'onboarding-step-4' 'onboarding' $onboarding 'Startup' $step4
     Invoke-UiaElement -Element (Find-UiaElement -Root $onboarding -AutomationId 'OnboardingNextButton')
     Wait-AcceptanceCondition -TimeoutSeconds 60 -FailureMessage 'Onboarding did not reach its completion state.' -Condition { $null -ne (Find-UiaElement -Root $onboarding -AutomationId 'OnboardingCompleteHeading' -Optional) }
@@ -521,7 +521,7 @@ if ($CapturePhase -eq 'Onboarding') {
 elseif ($CapturePhase -eq 'Main') {
     if ([string]::IsNullOrWhiteSpace($ExpectedLongPath) -or $ExpectedLongPath.Length -lt 80) { throw '-ExpectedLongPath (at least 80 characters) is mandatory for the main visual phase.' }
     if ([string]::IsNullOrWhiteSpace($ExpectedWarningText)) { throw '-ExpectedWarningText is mandatory for the main visual phase.' }
-    $main = Find-UiaWindow -Title 'Excel Diff Tracker' -ProcessId $product.Id -TimeoutSeconds 20; $themes = if ($environment.highContrast) { @('System') } else { @('Light','Dark','System') }
+    $main = Find-UiaWindow -Title 'Excel Scenario Analysis Tool' -ProcessId $product.Id -TimeoutSeconds 20; $themes = if ($environment.highContrast) { @('System') } else { @('Light','Dark','System') }
     foreach ($theme in $themes) {
         Invoke-UiaElement -Element (Find-UiaElement -Root $main -AutomationId 'SettingsNavigationButton'); Start-Sleep -Milliseconds 250
         $combo = Find-UiaElement -Root $main -AutomationId 'ThemeComboBox'; Invoke-UiaElement -Element $combo; Start-Sleep -Milliseconds 150; Invoke-UiaElement -Element (Find-UiaElement -Root $main -Name $theme); Start-Sleep -Milliseconds 450; Assert-SelectedTheme -ComboBox $combo -Theme $theme
@@ -530,14 +530,20 @@ elseif ($CapturePhase -eq 'Main') {
             if ($page -eq 'Dashboard') { $controls.DashboardAddWorkbookButton = @{ name = 'Add workbook'; role = 'ControlType.Button' } }
             if ($page -eq 'Workbooks') { $controls.WorkbooksAddWorkbookButton = @{ name = 'Add workbook'; role = 'ControlType.Button' } }
             if ($page -eq 'History') { $controls.HistoryWorkbookFilter = @{ name = 'Filter history by workbook'; role = 'ControlType.ComboBox' }; $controls.ShowValueHistoryCheckBox = @{ name = 'Show value changes'; role = 'ControlType.CheckBox' }; $controls.ShowFormulaHistoryCheckBox = @{ name = 'Show formula changes'; role = 'ControlType.CheckBox' }; $controls.ShowSheetHistoryCheckBox = @{ name = 'Show sheet changes'; role = 'ControlType.CheckBox' }; $controls.ShowErrorsCheckBox = @{ name = 'Show capture errors'; role = 'ControlType.CheckBox' } }
-            if ($page -eq 'Settings') { $controls.ThemeComboBox = @{ name = 'Application theme'; role = 'ControlType.ComboBox' }; $controls.StartWithWindowsCheckBox = @{ name = 'Start Excel Diff Tracker with Windows'; role = 'ControlType.CheckBox' }; $controls.ChooseDefaultReportFolderButton = @{ name = 'Choose default report folder'; role = 'ControlType.Button' } }
+            if ($page -eq 'Settings') { $controls.ThemeComboBox = @{ name = 'Application theme'; role = 'ControlType.ComboBox' }; $controls.StartWithWindowsCheckBox = @{ name = 'Start Excel Scenario Analysis Tool with Windows'; role = 'ControlType.CheckBox' }; $controls.ChooseDefaultReportFolderButton = @{ name = 'Choose default report folder'; role = 'ControlType.Button' } }
             Capture-State "$($theme.ToLowerInvariant())-$($page.ToLowerInvariant())-$($WindowSizeMode.ToLowerInvariant())" 'main-page' $main $theme $controls -RequireLongPath:($page -in @('Dashboard','Workbooks','History')) -RequireWarning:($page -eq 'History')
         }
     }
     Invoke-UiaElement -Element (Find-UiaElement -Root $main -AutomationId 'DashboardNavigationButton'); Invoke-UiaElement -Element (Find-UiaElement -Root $main -AutomationId 'DashboardAddWorkbookButton'); Capture-DialogAndCancel 'Choose a workbook to track' "main-workbook-picker-$($WindowSizeMode.ToLowerInvariant())" 'workbook-picker'
-    Invoke-UiaElement -Element (Find-UiaElement -Root $main -AutomationId 'SettingsNavigationButton'); Invoke-UiaElement -Element (Find-UiaElement -Root $main -AutomationId 'ChooseDefaultReportFolderButton'); Capture-DialogAndCancel 'Choose where Excel Diff Tracker should save Markdown reports' "main-report-folder-picker-$($WindowSizeMode.ToLowerInvariant())" 'folder-picker'
-    Invoke-UiaElement -Element (Find-UiaElement -Root $main -AutomationId 'WorkbooksNavigationButton'); $purge = Find-UiaElement -Root $main -Name ('Purge' + [char]0x2026) -Optional
-    if (-not $purge) { throw 'A populated workbook Purge control is required to capture the confirmation dialog.' }
+    Invoke-UiaElement -Element (Find-UiaElement -Root $main -AutomationId 'SettingsNavigationButton'); Invoke-UiaElement -Element (Find-UiaElement -Root $main -AutomationId 'ChooseDefaultReportFolderButton'); Capture-DialogAndCancel 'Choose where Excel Scenario Analysis Tool should save Markdown reports' "main-report-folder-picker-$($WindowSizeMode.ToLowerInvariant())" 'folder-picker'
+    Invoke-UiaElement -Element (Find-UiaElement -Root $main -AutomationId 'WorkbooksNavigationButton')
+    $more = Find-UiaElement -Root $main -Name 'Workbook actions' -Optional
+    if (-not $more) { throw 'A populated workbook actions menu is required to capture the purge confirmation dialog.' }
+    Invoke-UiaElement -Element $more; Start-Sleep -Milliseconds 200
+    $purge = @([System.Windows.Automation.AutomationElement]::RootElement.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.Condition]::TrueCondition) | Where-Object {
+        $_.Current.ProcessId -eq $product.Id -and -not $_.Current.IsOffscreen -and $_.Current.Name -eq ('Permanently purge history' + [char]0x2026) -and $_.Current.ControlType.ProgrammaticName -eq 'ControlType.MenuItem'
+    }) | Select-Object -First 1
+    if (-not $purge) { throw 'The open workbook actions menu does not expose Permanently purge history.' }
     Invoke-UiaElement -Element $purge; $purgeDialog = Find-UiaWindow -Title 'Permanently delete history?' -TimeoutSeconds 10; Capture-State "purge-confirmation-$($WindowSizeMode.ToLowerInvariant())" 'confirmation-dialog' $purgeDialog 'Windows'; Invoke-UiaElement -Element (Find-UiaElement -Root $purgeDialog -Name 'No')
 }
 else {
@@ -545,11 +551,11 @@ else {
     if ($UseDesktopRoot -and $StateName -ne 'tray-menu') { throw '-UseDesktopRoot is permitted only for a tray-menu capture.' }
     $target = if ($UseDesktopRoot) { [System.Windows.Automation.AutomationElement]::RootElement } else { Find-UiaWindow -Title $TargetWindowTitle -ProcessId $product.Id -TimeoutSeconds 15 }
     if ($StateName -eq 'tray-menu') {
-        foreach ($menuText in @('Open Excel Diff Tracker',('Add workbook' + [char]0x2026),'Exit')) {
+        foreach ($menuText in @('Open Excel Scenario Analysis Tool',('Add workbook' + [char]0x2026),'Exit')) {
             $menuItems = @($target.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.Condition]::TrueCondition) | Where-Object { $_.Current.ProcessId -eq $product.Id -and $_.Current.Name -eq $menuText -and $_.Current.ControlType.ProgrammaticName -eq 'ControlType.MenuItem' })
             if ($menuItems.Count -ne 1) { throw "The product-owned open tray menu does not expose exactly one required MenuItem: $menuText" }
         }
-        Capture-State "supplemental-$StateName-$($WindowSizeMode.ToLowerInvariant())" $StateName $target 'Observed' -ObservedStateText 'Open Excel Diff Tracker|Add workbook|Exit' -StateSemanticVerified
+        Capture-State "supplemental-$StateName-$($WindowSizeMode.ToLowerInvariant())" $StateName $target 'Observed' -ObservedStateText 'Open Excel Scenario Analysis Tool|Add workbook|Exit' -StateSemanticVerified
     }
     elseif ($StateName -eq 'toast') {
         $toast = Find-UiaElement -Root $target -AutomationId 'StatusToast' -Optional

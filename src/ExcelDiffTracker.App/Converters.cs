@@ -59,3 +59,17 @@ public sealed class ToastIconConverter : IValueConverter
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture) => value is true ? "⚠" : "✓";
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => Binding.DoNothing;
 }
+
+public sealed class PathFileNameConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is string path ? System.IO.Path.GetFileName(path) : string.Empty;
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => Binding.DoNothing;
+}
+
+public sealed class PathDirectoryConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is string path ? System.IO.Path.GetDirectoryName(path) ?? path : string.Empty;
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => Binding.DoNothing;
+}

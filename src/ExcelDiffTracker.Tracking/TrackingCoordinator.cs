@@ -287,6 +287,64 @@ public sealed class TrackingCoordinator : IAsyncDisposable
             cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task SetComparisonBaselineAsync(
+        Guid workbookId,
+        ComparisonBaselineMode mode,
+        long? specificVersionId = null,
+        CancellationToken cancellationToken = default)
+    {
+        await _store.SetComparisonBaselineAsync(workbookId, mode, specificVersionId, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<WorkbookComparison> GetSelectedComparisonAsync(Guid workbookId, CancellationToken cancellationToken = default)
+    {
+        var workbook = await _store.GetTrackedWorkbookAsync(workbookId, cancellationToken).ConfigureAwait(false)
+            ?? throw new KeyNotFoundException("Tracked workbook no longer exists.");
+        var baselineSequence = workbook.ComparisonBaselineMode switch
+        {
+            ComparisonBaselineMode.Previous => Math.Max(0, workbook.CurrentSequence - 1),
+            ComparisonBaselineMode.FirstScan => 0,
+            ComparisonBaselineMode.SpecificScan => await ResolveSpecificSequenceAsync(workbook, cancellationToken).ConfigureAwait(false),
+            _ => throw new InvalidDataException("The stored comparison baseline mode is not supported.")
+        };
+        var baseline = await _store.LoadSnapshotAtSequenceAsync(workbook, baselineSequence, cancellationToken).ConfigureAwait(false);
+        var current = await _store.LoadSnapshotAtSequenceAsync(workbook, workbook.CurrentSequence, cancellationToken).ConfigureAwait(false);
+        var diff = await Task.Run(() => _differ.Compare(baseline.Snapshot, current.Snapshot), cancellationToken).ConfigureAwait(false);
+        return new WorkbookComparison
+        {
+            WorkbookId = workbook.Id,
+            WorkbookPath = workbook.Path,
+            BaselineMode = workbook.ComparisonBaselineMode,
+            Baseline = baseline,
+            Current = current,
+            Diff = diff
+        };
+    }
+
+    public async Task<ReportWriteResult> ExportSelectedComparisonAsync(
+        Guid workbookId,
+        string destinationPath,
+        CancellationToken cancellationToken = default)
+    {
+        if (await _store.IsAutomaticReportPathAsync(destinationPath, cancellationToken).ConfigureAwait(false))
+            throw new InvalidOperationException("That file is an automatic chronological report. Choose a different filename so saved evidence remains unchanged.");
+        var comparison = await GetSelectedComparisonAsync(workbookId, cancellationToken).ConfigureAwait(false);
+        return await _reportWriter.WriteComparisonAsync(
+            destinationPath,
+            new ComparisonReportContext
+            {
+                WorkbookPath = comparison.WorkbookPath,
+                BaselineMode = comparison.BaselineMode,
+                BaselineSequence = comparison.Baseline.Sequence,
+                CurrentSequence = comparison.Current.Sequence,
+                BaselineSha256 = comparison.Baseline.Sha256,
+                CurrentSha256 = comparison.Current.Sha256,
+                GeneratedUtc = DateTime.UtcNow
+            },
+            comparison.Diff,
+            cancellationToken).ConfigureAwait(false);
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_lifetime.IsCancellationRequested)
@@ -473,7 +531,7 @@ public sealed class TrackingCoordinator : IAsyncDisposable
 
     private Task<ReportWriteResult> WriteReportAsync(VersionRecord version, WorkbookDiff diff, bool includeAll, CancellationToken cancellationToken) =>
         _reportWriter.WriteAsync(
-            version.ReportPath ?? throw new InvalidDataException("Version has no Markdown report path."),
+            version.ReportPath ?? throw new InvalidDataException("Saved scan has no Markdown report path."),
             ContextFor(version),
             diff,
             includeAll: includeAll,
@@ -493,6 +551,17 @@ public sealed class TrackingCoordinator : IAsyncDisposable
     {
         try { return await _store.GetTrackedWorkbookAsync(id, CancellationToken.None).ConfigureAwait(false); }
         catch { return null; }
+    }
+
+    private async Task<long> ResolveSpecificSequenceAsync(TrackedWorkbook workbook, CancellationToken cancellationToken)
+    {
+        if (workbook.SpecificBaselineVersionId is not { } versionId)
+            throw new InvalidDataException("The custom comparison baseline has no saved scan selected.");
+        var version = await _store.GetVersionAsync(versionId, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidDataException("The selected comparison baseline scan no longer exists.");
+        if (version.WorkbookId != workbook.Id)
+            throw new InvalidDataException("The selected comparison baseline belongs to another workbook.");
+        return version.Sequence;
     }
 
     private void Raise(CaptureEvent captureEvent)

@@ -1,6 +1,6 @@
 # Architecture
 
-Excel Diff Tracker is a local, per-user Windows tray application built as separate testable projects.
+Excel Scenario Analysis Tool is a local, per-user Windows tray application built as separate testable projects. The existing `ExcelDiffTracker.*` namespaces remain internal implementation names in 0.2.0.
 
 ## Components
 
@@ -31,11 +31,15 @@ Native libraries are extracted into the Windows user's temporary .NET bundle cac
 
 ## Formula semantics
 
-Formula XML is compared exactly as stored, as required by the product definition. Cached formula results are compared separately. Excel Diff Tracker does not calculate formulas or decide whether two formulas are mathematically equivalent.
+Formula XML is compared exactly as stored, as required by the product definition. Cached formula results are compared separately. Excel Scenario Analysis Tool does not calculate formulas or decide whether two formulas are mathematically equivalent.
 
 ## Storage model
 
-The SQLite database is `%LocalAppData%\Excel Diff Tracker\history.db`. It contains the current semantic snapshot and all deltas, not historical workbook files. WAL mode and foreign keys are enabled. The schema version is migrated transactionally and a database from a newer unsupported schema is rejected.
+The 0.2 SQLite database is `%LocalAppData%\Excel Scenario Analysis Tool\history.db`. It contains the current semantic snapshot and all deltas, not historical workbook files. WAL mode and foreign keys are enabled. The schema version is migrated transactionally and a database from a newer unsupported schema is rejected.
+
+## Comparison views
+
+Every accepted save remains a forward delta from the immediately preceding scan and every automatic Markdown report remains chronological. A per-workbook setting selects the comparison view: previous save, original scan 0, or a specific saved scan identified by its stable database ID. Historical snapshots are reconstructed locally by reverse-applying later sheet and cell deltas to the current semantic snapshot. The normal comparator then computes the selected-baseline view. Explicit derived exports identify both scan numbers and hashes and state that they do not replace chronological evidence.
 
 ## Security boundary
 

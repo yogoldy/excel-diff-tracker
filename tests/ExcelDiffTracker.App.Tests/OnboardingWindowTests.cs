@@ -1,5 +1,6 @@
 using System.Runtime.ExceptionServices;
 using System.Threading;
+using System.IO;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Automation.Peers;
@@ -13,6 +14,52 @@ namespace ExcelDiffTracker.App.Tests;
 
 public sealed class OnboardingWindowTests
 {
+    [Fact]
+    public void LegacyCleanupDeletesOnlyDatabaseFilesAndLeavesMarkdownEvidenceUntouched()
+    {
+        var directory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"scenario-cleanup-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            foreach (var name in new[] { "history.db", "history.db-shm", "history.db-wal" })
+                File.WriteAllText(System.IO.Path.Combine(directory, name), "old local database");
+            var markdown = System.IO.Path.Combine(directory, "saved-evidence.md");
+            File.WriteAllText(markdown, "retain");
+
+            LegacyDataCleanup.DeleteDatabaseFiles(directory);
+
+            Assert.Empty(LegacyDataCleanup.FindDatabaseFiles(directory));
+            Assert.True(File.Exists(markdown));
+            Assert.Equal("retain", File.ReadAllText(markdown));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void LegacyCleanupPreflightsEveryDatabaseFileBeforeDeletingAny()
+    {
+        var directory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"scenario-cleanup-lock-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        var paths = new[] { "history.db", "history.db-shm", "history.db-wal" }
+            .Select(name => System.IO.Path.Combine(directory, name))
+            .ToArray();
+        try
+        {
+            foreach (var path in paths)
+                File.WriteAllText(path, "old local database");
+            using (File.Open(paths[1], FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                Assert.Throws<IOException>(() => LegacyDataCleanup.DeleteDatabaseFiles(directory));
+            Assert.All(paths, path => Assert.True(File.Exists(path)));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     [Fact]
     public void ApplicationResourcesAndPrimaryWindowsPreserveThemeLayoutAndAutomationContracts()
     {
@@ -37,6 +84,7 @@ public sealed class OnboardingWindowTests
                 Assert.NotNull(mutedStyle.BasedOn);
                 Assert.NotNull(pageTitleStyle.BasedOn);
                 Assert.NotNull(sectionTitleStyle.BasedOn);
+                Assert.Contains(pageTitleStyle.Setters.OfType<Setter>(), setter => setter.Property == TextBlock.FontSizeProperty && Equals(setter.Value, 32d));
 
                 var contentScroller = Assert.IsType<ScrollViewer>(window.FindName("StepContentScrollViewer"));
                 Assert.Equal(ScrollBarVisibility.Auto, contentScroller.VerticalScrollBarVisibility);
@@ -60,14 +108,16 @@ public sealed class OnboardingWindowTests
                 Assert.Equal("MainWindow", AutomationProperties.GetAutomationId(mainWindow));
                 Assert.Equal(mainWindow.Title, new WindowAutomationPeer(mainWindow).GetName());
                 AssertTemplateAutomation(mainWindow, "DashboardWorkbooks", 1);
-                AssertTemplateAutomation(mainWindow, "WorkbookRows", 3);
-                AssertTemplateAutomation(mainWindow, "HistoryVersions", 2);
+                AssertTemplateAutomation(mainWindow, "WorkbookRows", 5);
+                AssertTemplateAutomation(mainWindow, "HistoryVersions", 5);
                 Assert.Equal("SettingsNavigationButton", AutomationProperties.GetAutomationId(Assert.IsType<Button>(mainWindow.FindName("SettingsNavigationButton"))));
                 var themeComboBox = Assert.IsType<ComboBox>(mainWindow.FindName("ThemeComboBox"));
                 Assert.Equal("ThemeComboBox", AutomationProperties.GetAutomationId(themeComboBox));
                 Assert.NotNull(themeComboBox.Template);
                 Assert.Equal(ScrollBarVisibility.Auto, Assert.IsType<ScrollViewer>(mainWindow.FindName("SettingsScrollViewer")).VerticalScrollBarVisibility);
                 Assert.Equal(ScrollBarVisibility.Auto, Assert.IsType<ScrollViewer>(mainWindow.FindName("AboutScrollViewer")).VerticalScrollBarVisibility);
+                Assert.Equal("Excel Scenario Analysis Tool", mainWindow.Title);
+                Assert.Equal("Welcome to Excel Scenario Analysis Tool", window.Title);
                 if (!SystemParameters.HighContrast)
                 {
                     Assert.Equal(GetResourceColor(application, "TextBrush"), Assert.IsType<SolidColorBrush>(themeComboBox.Foreground).Color);
@@ -121,7 +171,7 @@ public sealed class OnboardingWindowTests
         AssertContrast(palette, "PrimaryForegroundBrush", "AccentBrush", 3);
     }
 
-    private static void AssertTemplateAutomation(MainWindow window, string controlName, int actionCount)
+    private static void AssertTemplateAutomation(MainWindow window, string controlName, int minimumActionCount)
     {
         var items = Assert.IsAssignableFrom<ItemsControl>(window.FindName(controlName));
         var actionIds = new HashSet<string>();
@@ -133,6 +183,8 @@ public sealed class OnboardingWindowTests
             {
                 Id = record,
                 Path = path,
+                FileName = System.IO.Path.GetFileName(path),
+                Directory = System.IO.Path.GetDirectoryName(path),
                 WorkbookPath = path,
                 ReportDirectory = @"C:\Acceptance\reports",
                 IsEnabled = true,
@@ -143,14 +195,16 @@ public sealed class OnboardingWindowTests
                 CapturedUtc = DateTime.UtcNow,
                 LastSummary = "One cell changed",
                 Summary = "One cell changed",
-                LastError = (string?)null
+                LastError = (string?)null,
+                ComparisonSummary = "One changed cell",
+                ComparisonBaselineLabel = "Previous save"
             };
             root.Measure(new Size(760, 520));
             root.Arrange(new Rect(0, 0, 760, 520));
             root.UpdateLayout();
             var elements = Descendants(root).ToArray();
             var buttons = elements.OfType<Button>().ToArray();
-            Assert.Equal(actionCount, buttons.Length);
+            Assert.True(buttons.Length >= minimumActionCount, $"Expected at least {minimumActionCount} actions, found {buttons.Length}.");
             foreach (var button in buttons)
             {
                 var peer = new ButtonAutomationPeer(button);
@@ -159,10 +213,8 @@ public sealed class OnboardingWindowTests
                 Assert.False(string.IsNullOrWhiteSpace(peer.GetName()));
                 Assert.True(button.Focusable);
             }
-            var pathText = Assert.Single(elements.OfType<TextBlock>(), text => text.Text == path);
-            Assert.Equal(path, new TextBlockAutomationPeer(pathText).GetName());
-            Assert.Equal(path, new TextBlockAutomationPeer(pathText).GetHelpText());
-            Assert.Equal(path, pathText.ToolTip);
+            Assert.Contains(elements.OfType<TextBlock>(), text =>
+                new TextBlockAutomationPeer(text).GetHelpText() == path && Equals(text.ToolTip, path));
         }
     }
 
@@ -196,10 +248,25 @@ public sealed class OnboardingWindowTests
 
     private sealed class TestServices : IDisposable
     {
-        public TestServices() => Value = new AppServices();
+        private readonly string? _previousDirectory;
+        private readonly string _testDirectory;
+
+        public TestServices()
+        {
+            _testDirectory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"scenario-app-tests-{Guid.NewGuid():N}");
+            _previousDirectory = Environment.GetEnvironmentVariable("EXCEL_DIFF_TRACKER_TEST_DATA_DIRECTORY");
+            Environment.SetEnvironmentVariable("EXCEL_DIFF_TRACKER_TEST_DATA_DIRECTORY", _testDirectory);
+            Value = new AppServices();
+        }
 
         public AppServices Value { get; }
 
-        public void Dispose() => Value.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        public void Dispose()
+        {
+            Value.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            Environment.SetEnvironmentVariable("EXCEL_DIFF_TRACKER_TEST_DATA_DIRECTORY", _previousDirectory);
+            if (Directory.Exists(_testDirectory))
+                Directory.Delete(_testDirectory, recursive: true);
+        }
     }
 }

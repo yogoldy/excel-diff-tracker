@@ -19,12 +19,12 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
-        _singleInstance = new Mutex(initiallyOwned: true, "Local\\ExcelDiffTracker.Singleton", out var isFirstInstance);
+        _singleInstance = new Mutex(initiallyOwned: true, "Local\\ExcelScenarioAnalysisTool.Singleton", out var isFirstInstance);
         if (!isFirstInstance)
         {
             try
             {
-                using var activation = EventWaitHandle.OpenExisting("Local\\ExcelDiffTracker.Activate");
+                using var activation = EventWaitHandle.OpenExisting("Local\\ExcelScenarioAnalysisTool.Activate");
                 activation.Set();
             }
             catch (WaitHandleCannotBeOpenedException)
@@ -34,11 +34,12 @@ public partial class App : Application
             return;
         }
 
-        _activationEvent = new EventWaitHandle(false, EventResetMode.AutoReset, "Local\\ExcelDiffTracker.Activate");
+        _activationEvent = new EventWaitHandle(false, EventResetMode.AutoReset, "Local\\ExcelScenarioAnalysisTool.Activate");
         _activationStop = new ManualResetEvent(false);
 
         try
         {
+            LegacyDataCleanup.OfferOnFirstLaunch();
             _services = new AppServices();
             await _services.Coordinator.InitializeAsync();
 
@@ -80,7 +81,7 @@ public partial class App : Application
         catch (Exception exception)
         {
             MessageBox.Show(
-                $"Excel Diff Tracker could not start.\n\n{exception.Message}",
+                $"{AppBrand.ProductName} could not start.\n\n{exception.Message}",
                 "Startup problem",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);

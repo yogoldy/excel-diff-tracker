@@ -21,12 +21,15 @@ function Require-Condition {
     if (-not $Condition) { throw "Invalid candidate build identity: $Message" }
 }
 
-Require-Condition ($identity.schemaVersion -eq 1 -and $identity.product -eq 'Excel Diff Tracker') 'schema or product identity differs'
+Require-Condition ($identity.schemaVersion -eq 1 -and $identity.product -eq 'Excel Scenario Analysis Tool') 'schema or product identity differs'
 Require-Condition ($identity.version -eq $ExpectedVersion) 'version differs from the frozen candidate version'
 Require-Condition ($identity.sourceCommit -eq $expectedCommit) 'source commit differs from the frozen build commit'
 Require-Condition ($identity.sourceManifest -eq 'BUILD-SOURCE-SHA256SUMS.txt') 'source manifest filename differs'
 $expectedGeneratedPath = "packaging/winget/yogoldy.ExcelDiffTracker/$ExpectedVersion/yogoldy.ExcelDiffTracker.installer.yaml"
-Require-Condition ($identity.excludedGeneratedPath -eq $expectedGeneratedPath) 'source-manifest exclusion is not the one generated WinGet hash manifest'
+$hasGeneratedManifest = -not [string]::IsNullOrWhiteSpace([string]$identity.excludedGeneratedPath)
+if ($hasGeneratedManifest) {
+    Require-Condition ($identity.excludedGeneratedPath -eq $expectedGeneratedPath) 'source-manifest exclusion is not the one generated WinGet hash manifest'
+}
 
 $manifestHash = (Get-FileHash -LiteralPath $sourceManifestPath -Algorithm SHA256).Hash.ToUpperInvariant()
 Require-Condition ($identity.sourceManifestSha256 -eq $manifestHash) 'source manifest hash differs'
@@ -51,8 +54,16 @@ $dirtySource = @(& git -C $repositoryRoot status --porcelain --untracked-files=a
 Require-Condition ($LASTEXITCODE -eq 0 -and $dirtySource.Count -eq 0) 'release checkout is dirty'
 $trackedFiles = @(& git -C $repositoryRoot ls-files)
 Require-Condition ($LASTEXITCODE -eq 0 -and $trackedFiles.Count -gt 0) 'tracked source files cannot be enumerated'
-$includedFiles = @($trackedFiles | Where-Object { $_ -ne $expectedGeneratedPath } | Sort-Object)
-Require-Condition ($includedFiles.Count -eq ($trackedFiles.Count - 1)) 'generated WinGet manifest is not the one and only exclusion'
+$includedFiles = if ($hasGeneratedManifest) {
+    @($trackedFiles | Where-Object { $_ -ne $expectedGeneratedPath } | Sort-Object)
+} else {
+    @($trackedFiles | Sort-Object)
+}
+if ($hasGeneratedManifest) {
+    Require-Condition ($includedFiles.Count -eq ($trackedFiles.Count - 1)) 'generated WinGet manifest is not the one and only exclusion'
+} else {
+    Require-Condition ($includedFiles.Count -eq $trackedFiles.Count) 'source files were excluded without a generated WinGet manifest'
+}
 $lines = foreach ($relative in $includedFiles) {
     $fullPath = Join-Path $repositoryRoot $relative.Replace('/', [System.IO.Path]::DirectorySeparatorChar)
     Require-Condition (Test-Path $fullPath -PathType Leaf) "tracked source file is missing: $relative"

@@ -108,6 +108,13 @@ public enum TrackingStatus
     Warning
 }
 
+public enum ComparisonBaselineMode
+{
+    Previous,
+    FirstScan,
+    SpecificScan
+}
+
 public sealed record TrackedWorkbook
 {
     public required Guid Id { get; init; }
@@ -121,6 +128,26 @@ public sealed record TrackedWorkbook
     public required string CurrentHash { get; init; }
     public string? LastSummary { get; init; }
     public string? LastError { get; init; }
+    public ComparisonBaselineMode ComparisonBaselineMode { get; init; } = ComparisonBaselineMode.Previous;
+    public long? SpecificBaselineVersionId { get; init; }
+}
+
+public sealed record SnapshotRevision
+{
+    public required WorkbookSnapshot Snapshot { get; init; }
+    public required long Sequence { get; init; }
+    public required string Sha256 { get; init; }
+    public required DateTime CapturedUtc { get; init; }
+}
+
+public sealed record WorkbookComparison
+{
+    public required Guid WorkbookId { get; init; }
+    public required string WorkbookPath { get; init; }
+    public required ComparisonBaselineMode BaselineMode { get; init; }
+    public required SnapshotRevision Baseline { get; init; }
+    public required SnapshotRevision Current { get; init; }
+    public required WorkbookDiff Diff { get; init; }
 }
 
 public enum VersionStatus

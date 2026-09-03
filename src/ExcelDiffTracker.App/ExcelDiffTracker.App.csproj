@@ -6,15 +6,20 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>disable</ImplicitUsings>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
-    <AssemblyName>ExcelDiffTracker</AssemblyName>
+    <AssemblyName>ExcelScenarioAnalysisTool</AssemblyName>
     <RootNamespace>ExcelDiffTracker.App</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\..\assets\app-icon.ico</ApplicationIcon>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <RuntimeIdentifiers>win-arm64</RuntimeIdentifiers>
     <PublishSingleFile>true</PublishSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <SelfContained>true</SelfContained>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="..\..\assets\app-icon.ico" Link="app-icon.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="../ExcelDiffTracker.Core/ExcelDiffTracker.Core.csproj" />

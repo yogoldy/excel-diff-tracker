@@ -2,9 +2,15 @@
 
 Updated 2026-09-03 UTC.
 
-## Current phase: everyday use of 0.1.2
+## Current phase: 0.2.0 local scenario-analysis candidate
 
-Version 0.1.2 is installed on the maintainer's everyday Windows 11 ARM64 Parallels PC. The source changes through `3fb6304e6d95f0b1b83180d065f3e8be8ce5cfc7` have been pushed to `main`. The upgrade, history-preservation, tray, and real sign-out/sign-in checks passed. No 0.1.2 release tag or public installer release was created during this work.
+Development on `excel-scenario-analysis-tool` reframes the desktop product around saved scenario evidence and selected-baseline comparisons. The current implementation keeps chronological save reports immutable while adding previous-save, original-baseline, and specific-scan comparison views; responsive compact/expanded workbook and history pages; path actions; new branding; native title-bar theme synchronization; and a fresh 0.2 local-data boundary. It is a local candidate only. The 30-test source suite, targeted minimum-size visual review, and two independent Sol-medium reviews passed on 2026-09-03. Installed replacement and upgrade testing still must complete before it can replace the everyday installation.
+
+The 0.2 transition may delete only the old SQLite `history.db`, `history.db-shm`, and `history.db-wal` files after explicit confirmation. Existing Markdown reports are outside that cleanup boundary and must remain untouched.
+
+## Installed baseline: everyday use of 0.1.2
+
+Version 0.1.2 is installed on the maintainer's everyday Windows 11 ARM64 Parallels PC. Tag `v0.1.2` anchors the installed source line for maintainer use; it is not evidence that the full public-release qualification gates passed. The upgrade, history-preservation, tray, and real sign-out/sign-in checks passed.
 
 The next step is to use the installed app during normal Excel work and report observed problems. Everyday use has been planned; sustained workflow reliability has not yet been established. Useful feedback includes what was edited, when it was saved, what history/report appeared, and any visible error. Screenshots and a small reproducible workbook are useful when available; private workbook contents need not be published.
 

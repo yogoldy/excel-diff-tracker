@@ -13,6 +13,7 @@ public partial class OnboardingWindow : Window, INotifyPropertyChanged
     private string _reportFolder = AppPaths.SuggestedReportsDirectory;
     private string _workbookPath = string.Empty;
     private bool _completed;
+    private readonly WindowThemeService _windowTheme;
 
     public OnboardingWindow(AppServices services)
     {
@@ -20,6 +21,7 @@ public partial class OnboardingWindow : Window, INotifyPropertyChanged
         InitializeComponent();
         _steps = [StepOne, StepTwo, StepThree, StepFour, StepFive];
         DataContext = this;
+        _windowTheme = WindowThemeService.Attach(this, services.Themes);
         UpdateStep();
     }
 
@@ -139,13 +141,15 @@ public partial class OnboardingWindow : Window, INotifyPropertyChanged
     {
         if (!_completed)
         {
-            var answer = MessageBox.Show("Finish setup later? Excel Diff Tracker will remain available, but no workbook will be tracked until onboarding is complete.", "Leave setup?", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
+            var answer = MessageBox.Show("Finish setup later? Excel Scenario Analysis Tool will remain available, but no workbook will be tracked until onboarding is complete.", "Leave setup?", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No);
             if (answer != MessageBoxResult.Yes)
             {
                 args.Cancel = true;
                 return;
             }
         }
+        if (!args.Cancel)
+            _windowTheme.Dispose();
         base.OnClosing(args);
     }
 }

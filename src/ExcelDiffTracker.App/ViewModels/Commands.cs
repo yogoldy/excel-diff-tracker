@@ -28,7 +28,7 @@ public sealed class AsyncRelayCommand(Func<object?, Task> execute, Predicate<obj
         }
         catch (Exception exception)
         {
-            MessageBox.Show(exception.Message, "Excel Diff Tracker", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(exception.Message, "Excel Scenario Analysis Tool", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {

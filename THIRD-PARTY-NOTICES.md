@@ -1,10 +1,10 @@
 # Third-party notices
 
-Excel Diff Tracker is distributed under the MIT License. It uses or was informed by the following open-source projects.
+Excel Scenario Analysis Tool is distributed under the MIT License. It uses or was informed by the following open-source projects.
 
 ## xlsx-review
 
-The workbook comparison design was informed by [drpedapati/xlsx-review](https://github.com/drpedapati/xlsx-review) at commit [`c39bcf7e6817b79da08852ccc48c950b097fd1b9`](https://github.com/drpedapati/xlsx-review/commit/c39bcf7e6817b79da08852ccc48c950b097fd1b9). Excel Diff Tracker is an independent C# implementation and has no runtime dependency on xlsx-review.
+The workbook comparison design was informed by [drpedapati/xlsx-review](https://github.com/drpedapati/xlsx-review) at commit [`c39bcf7e6817b79da08852ccc48c950b097fd1b9`](https://github.com/drpedapati/xlsx-review/commit/c39bcf7e6817b79da08852ccc48c950b097fd1b9). Excel Scenario Analysis Tool is an independent C# implementation and has no runtime dependency on xlsx-review.
 
 Copyright (c) 2026 CinciNeuro / Henry Bloomingdale
 
@@ -22,15 +22,15 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 Copyright (c) 2025 CJ Pais
 
-Handy is MIT licensed. No Handy source code, name, logo, hand icon, illustrations, or brand assets are included in Excel Diff Tracker.
+Handy is MIT licensed. No Handy source code, name, logo, hand icon, illustrations, or brand assets are included in Excel Scenario Analysis Tool.
 
 ## Microsoft Open XML SDK
 
-Excel Diff Tracker uses [DocumentFormat.OpenXml](https://github.com/dotnet/Open-XML-SDK), licensed under the MIT License. Copyright (c) .NET Foundation and Contributors.
+Excel Scenario Analysis Tool uses [DocumentFormat.OpenXml](https://github.com/dotnet/Open-XML-SDK), licensed under the MIT License. Copyright (c) .NET Foundation and Contributors.
 
 ## Microsoft.Data.Sqlite
 
-Excel Diff Tracker uses [Microsoft.Data.Sqlite](https://github.com/dotnet/efcore), licensed under the MIT License. Copyright (c) .NET Foundation and Contributors.
+Excel Scenario Analysis Tool uses [Microsoft.Data.Sqlite](https://github.com/dotnet/efcore), licensed under the MIT License. Copyright (c) .NET Foundation and Contributors.
 
 ## SQLitePCLRaw 2.1.12 and SQLite
 

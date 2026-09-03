@@ -1,17 +1,17 @@
 <Window x:Class="ExcelDiffTracker.App.OnboardingWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Welcome to Excel Diff Tracker" Width="710" Height="540" MinWidth="620" MinHeight="460" ResizeMode="CanResize"
-        WindowStartupLocation="CenterScreen" ShowInTaskbar="True"
-        AutomationProperties.AutomationId="OnboardingWindow" AutomationProperties.Name="Welcome to Excel Diff Tracker">
-    <Grid Margin="28">
+        Title="Welcome to Excel Scenario Analysis Tool" Width="760" Height="570" MinWidth="660" MinHeight="490" ResizeMode="CanResize"
+        WindowStartupLocation="CenterScreen" ShowInTaskbar="True" Icon="app-icon.ico" Background="{DynamicResource AppBackgroundBrush}" Foreground="{DynamicResource TextBrush}"
+        AutomationProperties.AutomationId="OnboardingWindow" AutomationProperties.Name="Welcome to Excel Scenario Analysis Tool">
+    <Grid Margin="28" Background="{DynamicResource AppBackgroundBrush}">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
 
         <Grid>
             <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
             <StackPanel Orientation="Horizontal">
-                <Border Width="38" Height="38" Background="{DynamicResource AccentBrush}" CornerRadius="10"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource PrimaryForegroundBrush}" FontWeight="Bold" FontSize="18" Text="↺"/></Border>
-                <StackPanel Margin="12,0,0,0"><TextBlock FontWeight="SemiBold" FontSize="16" Text="Excel Diff Tracker"/><TextBlock Style="{StaticResource MutedText}" Text="Private change history, made simple."/></StackPanel>
+                <Border Width="46" Height="46" Background="{DynamicResource AccentBrush}" CornerRadius="11"><Canvas Width="38" Height="38"><Path Stroke="{DynamicResource PrimaryForegroundBrush}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M5,7 L17,7 L17,31 L5,31 Z M5,15 L17,15 M5,23 L17,23 M11,7 L11,31 M14,19 L20,19 M20,19 L28,11 M20,19 L31,19 M20,19 L28,27"/><Ellipse Canvas.Left="26" Canvas.Top="9" Width="5" Height="5" Fill="{DynamicResource PrimaryForegroundBrush}"/><Ellipse Canvas.Left="29" Canvas.Top="16.5" Width="5" Height="5" Fill="{DynamicResource PrimaryForegroundBrush}"/><Ellipse Canvas.Left="26" Canvas.Top="24.5" Width="5" Height="5" Fill="{DynamicResource PrimaryForegroundBrush}"/></Canvas></Border>
+                <StackPanel Margin="12,0,0,0" MaxWidth="380"><TextBlock FontWeight="Bold" FontSize="18" Text="Excel Scenario Analysis Tool"/><TextBlock Style="{StaticResource MutedText}" Text="Private save evidence and flexible comparisons." TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/></StackPanel>
             </StackPanel>
             <TextBlock Grid.Column="1" Margin="16,0,0,0" VerticalAlignment="Center" Style="{StaticResource MutedText}" Text="{Binding StepLabel}" AutomationProperties.AutomationId="OnboardingStepLabel"/>
         </Grid>
@@ -54,7 +54,7 @@
                     <TextBlock Margin="0,10,0,18" TextAlignment="Center" Style="{StaticResource MutedText}" Text="These defaults can be changed later in Settings."/>
                     <Border x:Name="OptionsCard" Style="{StaticResource Card}" Padding="0">
                         <StackPanel>
-                            <Grid Margin="18"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel Margin="0,0,16,0"><TextBlock FontWeight="SemiBold" Text="Start with Windows"/><TextBlock Style="{StaticResource MutedText}" Text="Runs quietly in the notification area."/></StackPanel><CheckBox x:Name="StartupCheck" Grid.Column="1" VerticalAlignment="Center" IsChecked="True" AutomationProperties.AutomationId="OnboardingStartWithWindowsCheckBox" AutomationProperties.Name="Start Excel Diff Tracker with Windows"/></Grid>
+                            <Grid Margin="18"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel Margin="0,0,16,0"><TextBlock FontWeight="SemiBold" Text="Start with Windows"/><TextBlock Style="{StaticResource MutedText}" Text="Runs quietly in the notification area."/></StackPanel><CheckBox x:Name="StartupCheck" Grid.Column="1" VerticalAlignment="Center" IsChecked="True" AutomationProperties.AutomationId="OnboardingStartWithWindowsCheckBox" AutomationProperties.Name="Start Excel Scenario Analysis Tool with Windows"/></Grid>
                             <Border Height="1" Background="{DynamicResource BorderBrush}"/>
                             <Grid Margin="18"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel Margin="0,0,16,0"><TextBlock FontWeight="SemiBold" Text="Begin tracking now"/><TextBlock Style="{StaticResource MutedText}" Text="Your chosen workbook will receive a silent baseline."/></StackPanel><CheckBox x:Name="TrackingCheck" Grid.Column="1" VerticalAlignment="Center" IsChecked="True" IsEnabled="False" AutomationProperties.AutomationId="OnboardingBeginTrackingCheckBox" AutomationProperties.Name="Begin tracking the selected workbook"/></Grid>
                         </StackPanel>
@@ -67,7 +67,7 @@
                 <StackPanel MaxWidth="540" Margin="8,14" HorizontalAlignment="Center" VerticalAlignment="Center">
                     <Border Width="72" Height="72" HorizontalAlignment="Center" Background="{DynamicResource AccentSoftBrush}" CornerRadius="36"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource AccentBrush}" FontSize="32" FontWeight="Bold" Text="✓"/></Border>
                     <TextBlock Margin="0,20,0,0" HorizontalAlignment="Center" FontSize="25" FontWeight="SemiBold" Text="Tracking is active" AutomationProperties.AutomationId="OnboardingCompleteHeading"/>
-                    <TextBlock Margin="0,13,0,0" TextAlignment="Center" Style="{StaticResource MutedText}" FontSize="14" Text="You can close the main window whenever you like. Excel Diff Tracker keeps watching quietly from the notification area and will tell you when a save is captured."/>
+                    <TextBlock Margin="0,13,0,0" TextAlignment="Center" Style="{StaticResource MutedText}" Text="You can close the main window whenever you like. Excel Scenario Analysis Tool keeps watching quietly from the notification area and will tell you when a save is captured."/>
                 </StackPanel>
             </Grid>
           </Grid>

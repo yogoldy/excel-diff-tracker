@@ -21,6 +21,17 @@ public sealed record ReportWriteResult
     public required int IncludedCellChanges { get; init; }
 }
 
+public sealed record ComparisonReportContext
+{
+    public required string WorkbookPath { get; init; }
+    public required ComparisonBaselineMode BaselineMode { get; init; }
+    public required long BaselineSequence { get; init; }
+    public required long CurrentSequence { get; init; }
+    public required string BaselineSha256 { get; init; }
+    public required string CurrentSha256 { get; init; }
+    public required DateTime GeneratedUtc { get; init; }
+}
+
 public sealed class MarkdownReportWriter
 {
     public const int DefaultInlineChangeLimit = 5_000;
@@ -70,7 +81,7 @@ public sealed class MarkdownReportWriter
     public string Render(ReportContext context, WorkbookDiff diff, int includedCellChanges, bool wasTruncated)
     {
         var builder = new StringBuilder(16_384);
-        builder.AppendLine("# Excel Diff Tracker report");
+        builder.AppendLine("# Excel Scenario Analysis Tool — saved-change report");
         builder.AppendLine();
         builder.AppendLine($"- Workbook: <code>{EscapeUntrusted(context.WorkbookPath)}</code>");
         builder.AppendLine($"- Version: {context.Sequence.ToString(CultureInfo.InvariantCulture)}");
@@ -84,6 +95,51 @@ public sealed class MarkdownReportWriter
         AppendSheetChanges(builder, diff.SheetChanges);
         AppendCellChanges(builder, diff.CellChanges.Take(includedCellChanges), diff.CellChanges.Count, wasTruncated);
         return builder.ToString();
+    }
+
+    public async Task<ReportWriteResult> WriteComparisonAsync(
+        string outputPath,
+        ComparisonReportContext context,
+        WorkbookDiff diff,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(diff);
+
+        var builder = new StringBuilder(16_384);
+        builder.AppendLine("# Excel Scenario Analysis Tool — selected-baseline comparison");
+        builder.AppendLine();
+        builder.AppendLine("> This is a derived comparison view. It does not replace or rewrite the chronological saved-change reports.");
+        builder.AppendLine();
+        builder.AppendLine($"- Workbook: <code>{EscapeUntrusted(context.WorkbookPath)}</code>");
+        builder.AppendLine($"- Baseline mode: {Humanize(context.BaselineMode)}");
+        builder.AppendLine($"- Baseline scan: {context.BaselineSequence.ToString(CultureInfo.InvariantCulture)}");
+        builder.AppendLine($"- Current scan: {context.CurrentSequence.ToString(CultureInfo.InvariantCulture)}");
+        builder.AppendLine($"- Baseline SHA-256: `{context.BaselineSha256}`");
+        builder.AppendLine($"- Current SHA-256: `{context.CurrentSha256}`");
+        builder.AppendLine($"- Generated (UTC): {FormatDate(context.GeneratedUtc)}");
+        builder.AppendLine();
+        AppendSummary(builder, diff);
+        AppendSheetChanges(builder, diff.SheetChanges);
+        AppendCellChanges(builder, diff.CellChanges, diff.CellChanges.Count, wasTruncated: false);
+
+        var fullPath = Path.GetFullPath(outputPath);
+        var directory = Path.GetDirectoryName(fullPath)
+            ?? throw new InvalidOperationException("The report path has no parent directory.");
+        Directory.CreateDirectory(directory);
+        var temporaryPath = Path.Combine(directory, $".{Path.GetFileName(fullPath)}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            await File.WriteAllTextAsync(temporaryPath, builder.ToString(), new UTF8Encoding(false), cancellationToken).ConfigureAwait(false);
+            File.Move(temporaryPath, fullPath, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+                File.Delete(temporaryPath);
+        }
+        return new ReportWriteResult { Path = fullPath, WasTruncated = false, IncludedCellChanges = diff.CellChanges.Count };
     }
 
     private static void AppendSummary(StringBuilder builder, WorkbookDiff diff)

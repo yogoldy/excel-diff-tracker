@@ -8,7 +8,7 @@ namespace ExcelDiffTracker.Storage;
 
 public sealed class HistoryStore
 {
-    private const int CurrentSchemaVersion = 1;
+    private const int CurrentSchemaVersion = 2;
     private const int PayloadVersion = 1;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly string _connectionString;
@@ -40,7 +40,12 @@ public sealed class HistoryStore
         if (version > CurrentSchemaVersion)
             throw new InvalidOperationException($"History database schema {version} is newer than this app supports ({CurrentSchemaVersion}).");
         if (version < 1)
+        {
             await ApplyMigration1Async(connection, cancellationToken).ConfigureAwait(false);
+            version = 1;
+        }
+        if (version < 2)
+            await ApplyMigration2Async(connection, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<TrackedWorkbook> AddBaselineAsync(
@@ -300,6 +305,50 @@ public sealed class HistoryStore
         };
     }
 
+    public async Task<SnapshotRevision> LoadSnapshotAtSequenceAsync(
+        TrackedWorkbook workbook,
+        long sequence,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(workbook);
+        if (sequence < 0 || sequence > workbook.CurrentSequence)
+            throw new ArgumentOutOfRangeException(nameof(sequence), $"Scan {sequence} is outside this workbook's saved history.");
+
+        var current = await LoadCurrentSnapshotAsync(workbook, cancellationToken).ConfigureAwait(false);
+        var mutableSheets = current.Sheets.ToDictionary(
+            pair => pair.Key,
+            pair => new MutableSheet(pair.Value),
+            EqualityComparer<uint>.Default);
+
+        var laterVersions = await GetVersionsAfterSequenceAsync(workbook.Id, sequence, cancellationToken).ConfigureAwait(false);
+        if (laterVersions.Length != workbook.CurrentSequence - sequence)
+            throw new InvalidDataException("The requested comparison cannot be reconstructed because the saved history has a sequence gap.");
+
+        foreach (var version in laterVersions)
+        {
+            var diff = await GetVersionDiffAsync(version.Id, cancellationToken).ConfigureAwait(false);
+            ReverseApply(mutableSheets, diff);
+        }
+
+        var sheets = mutableSheets.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value.ToImmutable(),
+            EqualityComparer<uint>.Default);
+        var metadata = await GetRevisionMetadataAsync(workbook, sequence, cancellationToken).ConfigureAwait(false);
+        return new SnapshotRevision
+        {
+            Snapshot = new WorkbookSnapshot
+            {
+                SourcePath = workbook.Path,
+                CapturedAtUtc = metadata.CapturedUtc,
+                Sheets = new ReadOnlyDictionary<uint, SheetState>(sheets)
+            },
+            Sequence = sequence,
+            Sha256 = metadata.Sha256,
+            CapturedUtc = metadata.CapturedUtc
+        };
+    }
+
     public async Task<IReadOnlyList<VersionRecord>> GetVersionsAsync(Guid? workbookId = null, int limit = 500, CancellationToken cancellationToken = default)
     {
         var result = new List<VersionRecord>();
@@ -315,6 +364,16 @@ public sealed class HistoryStore
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             result.Add(ReadVersion(reader));
         return result;
+    }
+
+    public async Task<VersionRecord?> GetVersionAsync(long versionId, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT v.*,w.path FROM versions v JOIN tracked_workbooks w ON w.id=v.workbook_id WHERE v.id=$id;";
+        command.Parameters.AddWithValue("$id", versionId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        return await reader.ReadAsync(cancellationToken).ConfigureAwait(false) ? ReadVersion(reader) : null;
     }
 
     public async Task<IReadOnlyList<CaptureErrorRecord>> GetErrorsAsync(Guid? workbookId = null, int limit = 500, CancellationToken cancellationToken = default)
@@ -386,6 +445,22 @@ public sealed class HistoryStore
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             result.Add(reader.GetString(0));
         return result;
+    }
+
+    public async Task<bool> IsAutomaticReportPathAsync(string path, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        var candidate = Path.GetFullPath(path);
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT report_path FROM versions WHERE report_path IS NOT NULL;";
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            if (string.Equals(candidate, Path.GetFullPath(reader.GetString(0)), StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
     }
 
     public async Task MarkReportsPendingAsync(Guid workbookId, CancellationToken cancellationToken = default)
@@ -477,6 +552,41 @@ public sealed class HistoryStore
         command.Parameters.AddWithValue("$directory", Path.GetFullPath(reportDirectory));
         command.Parameters.AddWithValue("$id", workbookId.ToString("D"));
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task SetComparisonBaselineAsync(
+        Guid workbookId,
+        ComparisonBaselineMode mode,
+        long? specificVersionId,
+        CancellationToken cancellationToken = default)
+    {
+        if (mode == ComparisonBaselineMode.SpecificScan && specificVersionId is null)
+            throw new ArgumentException("A specific saved scan is required for the custom baseline.", nameof(specificVersionId));
+        if (mode != ComparisonBaselineMode.SpecificScan)
+            specificVersionId = null;
+
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = connection.BeginTransaction();
+        if (specificVersionId is not null)
+        {
+            await using var validate = connection.CreateCommand();
+            validate.Transaction = transaction;
+            validate.CommandText = "SELECT COUNT(*) FROM versions WHERE id=$version_id AND workbook_id=$workbook_id;";
+            validate.Parameters.AddWithValue("$version_id", specificVersionId.Value);
+            validate.Parameters.AddWithValue("$workbook_id", workbookId.ToString("D"));
+            if (Convert.ToInt32(await validate.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false), CultureInfo.InvariantCulture) != 1)
+                throw new InvalidOperationException("The selected scan does not belong to this workbook.");
+        }
+
+        await using var update = connection.CreateCommand();
+        update.Transaction = transaction;
+        update.CommandText = "UPDATE tracked_workbooks SET comparison_baseline_mode=$mode,specific_baseline_version_id=$version_id WHERE id=$id;";
+        update.Parameters.AddWithValue("$mode", mode.ToString());
+        update.Parameters.AddWithValue("$version_id", specificVersionId is null ? DBNull.Value : specificVersionId.Value);
+        update.Parameters.AddWithValue("$id", workbookId.ToString("D"));
+        if (await update.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) != 1)
+            throw new KeyNotFoundException("Tracked workbook no longer exists.");
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public Task StopTrackingAsync(Guid workbookId, CancellationToken cancellationToken = default) => SetEnabledAsync(workbookId, false, cancellationToken);
@@ -583,6 +693,22 @@ public sealed class HistoryStore
             CREATE INDEX ix_capture_errors_workbook_seen ON capture_errors(workbook_id,last_seen_utc DESC);
             INSERT INTO schema_migrations(version,applied_utc) VALUES(1,$applied_utc);
             PRAGMA user_version=1;
+            """;
+        command.Parameters.AddWithValue("$applied_utc", FormatDate(DateTime.UtcNow));
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task ApplyMigration2Async(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        await using var transaction = connection.BeginTransaction();
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            ALTER TABLE tracked_workbooks ADD COLUMN comparison_baseline_mode TEXT NOT NULL DEFAULT 'Previous';
+            ALTER TABLE tracked_workbooks ADD COLUMN specific_baseline_version_id INTEGER;
+            INSERT INTO schema_migrations(version,applied_utc) VALUES(2,$applied_utc);
+            PRAGMA user_version=2;
             """;
         command.Parameters.AddWithValue("$applied_utc", FormatDate(DateTime.UtcNow));
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
@@ -767,6 +893,83 @@ public sealed class HistoryStore
         return (reader.GetInt64(0), reader.GetString(1), reader.GetInt32(2) != 0);
     }
 
+    private async Task<(string Sha256, DateTime CapturedUtc)> GetRevisionMetadataAsync(
+        TrackedWorkbook workbook,
+        long sequence,
+        CancellationToken cancellationToken)
+    {
+        if (sequence == workbook.CurrentSequence)
+            return (workbook.CurrentHash, workbook.LastSuccessfulCaptureUtc ?? workbook.CreatedUtc);
+
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = sequence == 0
+            ? "SELECT previous_sha256 FROM versions WHERE workbook_id=$id ORDER BY sequence LIMIT 1;"
+            : "SELECT sha256,captured_utc FROM versions WHERE workbook_id=$id AND sequence=$sequence;";
+        command.Parameters.AddWithValue("$id", workbook.Id.ToString("D"));
+        if (sequence != 0)
+            command.Parameters.AddWithValue("$sequence", sequence);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            if (sequence == 0 && workbook.CurrentSequence == 0)
+                return (workbook.CurrentHash, workbook.CreatedUtc);
+            throw new InvalidDataException($"Stored metadata for scan {sequence} is missing.");
+        }
+        return sequence == 0
+            ? (reader.GetString(0), workbook.CreatedUtc)
+            : (reader.GetString(0), ParseDate(reader.GetString(1)));
+    }
+
+    private async Task<VersionRecord[]> GetVersionsAfterSequenceAsync(
+        Guid workbookId,
+        long sequence,
+        CancellationToken cancellationToken)
+    {
+        var result = new List<VersionRecord>();
+        await using var connection = await OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT v.*,w.path FROM versions v JOIN tracked_workbooks w ON w.id=v.workbook_id WHERE v.workbook_id=$workbook_id AND v.sequence>$sequence ORDER BY v.sequence DESC;";
+        command.Parameters.AddWithValue("$workbook_id", workbookId.ToString("D"));
+        command.Parameters.AddWithValue("$sequence", sequence);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            result.Add(ReadVersion(reader));
+        return result.ToArray();
+    }
+
+    private static void ReverseApply(IDictionary<uint, MutableSheet> sheets, WorkbookDiff diff)
+    {
+        foreach (var change in diff.SheetChanges.Where(item => item.Kind == SheetChangeKind.Removed))
+        {
+            if (change.Before is null)
+                throw new InvalidDataException("A removed sheet change has no before-state.");
+            sheets[change.SheetId] = new MutableSheet(change.Before);
+        }
+
+        foreach (var change in diff.CellChanges)
+        {
+            if (!sheets.TryGetValue(change.SheetId, out var sheet))
+                throw new InvalidDataException($"Cell history references missing sheet {change.SheetId}.");
+            if (change.Before is null)
+                sheet.Cells.Remove(change.Address);
+            else
+                sheet.Cells[change.Address] = change.Before;
+        }
+
+        foreach (var change in diff.SheetChanges)
+        {
+            if (change.Kind == SheetChangeKind.Added)
+            {
+                sheets.Remove(change.SheetId);
+                continue;
+            }
+            if (change.Before is null || !sheets.TryGetValue(change.SheetId, out var sheet))
+                throw new InvalidDataException($"Sheet history for {change.SheetId} is incomplete.");
+            sheet.State = change.Before with { Cells = EmptyCells() };
+        }
+    }
+
     private static VersionRecord ReadVersion(SqliteDataReader reader) => new()
     {
         Id = reader.GetInt64(reader.GetOrdinal("id")),
@@ -801,8 +1004,29 @@ public sealed class HistoryStore
         CurrentSequence = reader.GetInt64(reader.GetOrdinal("current_sequence")),
         CurrentHash = reader.GetString(reader.GetOrdinal("current_hash")),
         LastSummary = GetNullableString(reader, "last_summary"),
-        LastError = GetNullableString(reader, "last_error")
+        LastError = GetNullableString(reader, "last_error"),
+        ComparisonBaselineMode = Enum.Parse<ComparisonBaselineMode>(reader.GetString(reader.GetOrdinal("comparison_baseline_mode"))),
+        SpecificBaselineVersionId = reader.IsDBNull(reader.GetOrdinal("specific_baseline_version_id"))
+            ? null
+            : reader.GetInt64(reader.GetOrdinal("specific_baseline_version_id"))
     };
+
+    private sealed class MutableSheet
+    {
+        public MutableSheet(SheetState state)
+        {
+            State = state with { Cells = EmptyCells() };
+            Cells = new Dictionary<string, CellState>(state.Cells, StringComparer.OrdinalIgnoreCase);
+        }
+
+        public SheetState State { get; set; }
+        public Dictionary<string, CellState> Cells { get; }
+
+        public SheetState ToImmutable() => State with
+        {
+            Cells = new ReadOnlyDictionary<string, CellState>(new Dictionary<string, CellState>(Cells, StringComparer.OrdinalIgnoreCase))
+        };
+    }
 
     private static T Deserialize<T>(string json) => JsonSerializer.Deserialize<T>(json, JsonOptions)
         ?? throw new InvalidDataException($"Stored {typeof(T).Name} payload is invalid.");

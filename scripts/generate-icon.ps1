@@ -30,11 +30,8 @@ function New-IconPng {
     $bitmap = [System.Drawing.Bitmap]::new($Size, $Size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
     $background = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(40, 122, 104))
-    $paper = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(249, 247, 241))
-    $blue = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(45, 132, 170))
-    $darkPen = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(23, 61, 54), [Math]::Max(1.0, 10 * $scale))
-    $whitePen = [System.Drawing.Pen]::new([System.Drawing.Color]::White, [Math]::Max(1.0, 10 * $scale))
-    $tealPen = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(40, 122, 104), [Math]::Max(1.0, 10 * $scale))
+    $white = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(247, 251, 249))
+    $whitePen = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(247, 251, 249), [Math]::Max(1.0, 11 * $scale))
     $stream = [System.IO.MemoryStream]::new()
 
     try {
@@ -44,31 +41,31 @@ function New-IconPng {
         $backgroundPath = New-RoundedPath -Rectangle ([System.Drawing.RectangleF]::new(0, 0, $Size, $Size)) -Radius ([float](58 * $scale))
         try { $graphics.FillPath($background, $backgroundPath) } finally { $backgroundPath.Dispose() }
 
-        $page = [System.Drawing.RectangleF]::new([float](61 * $scale), [float](40 * $scale), [float](134 * $scale), [float](174 * $scale))
-        $graphics.FillRectangle($paper, $page)
-        $graphics.DrawRectangle($darkPen, $page.X, $page.Y, $page.Width, $page.Height)
-        $tealPen.StartCap = $tealPen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
-        $graphics.DrawLine($tealPen, 86 * $scale, 103 * $scale, 152 * $scale, 103 * $scale)
-        $graphics.DrawLine($tealPen, 86 * $scale, 133 * $scale, 138 * $scale, 133 * $scale)
-        $graphics.DrawLine($tealPen, 86 * $scale, 163 * $scale, 125 * $scale, 163 * $scale)
-
-        $graphics.FillEllipse($blue, 123 * $scale, 123 * $scale, 96 * $scale, 96 * $scale)
-        $graphics.DrawEllipse($darkPen, 123 * $scale, 123 * $scale, 96 * $scale, 96 * $scale)
         $whitePen.StartCap = $whitePen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
-        $graphics.DrawLine($whitePen, 171 * $scale, 143 * $scale, 171 * $scale, 173 * $scale)
-        $graphics.DrawLine($whitePen, 171 * $scale, 173 * $scale, 192 * $scale, 186 * $scale)
+        $whitePen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
+        $grid = [System.Drawing.RectangleF]::new([float](42 * $scale), [float](47 * $scale), [float](92 * $scale), [float](162 * $scale))
+        $gridPath = New-RoundedPath -Rectangle $grid -Radius ([float](9 * $scale))
+        try { $graphics.DrawPath($whitePen, $gridPath) } finally { $gridPath.Dispose() }
+        $graphics.DrawLine($whitePen, 42 * $scale, 91 * $scale, 134 * $scale, 91 * $scale)
+        $graphics.DrawLine($whitePen, 42 * $scale, 135 * $scale, 134 * $scale, 135 * $scale)
+        $graphics.DrawLine($whitePen, 42 * $scale, 177 * $scale, 134 * $scale, 177 * $scale)
+        $graphics.DrawLine($whitePen, 88 * $scale, 47 * $scale, 88 * $scale, 209 * $scale)
+        $graphics.DrawLine($whitePen, 111 * $scale, 135 * $scale, 139 * $scale, 135 * $scale)
+        $graphics.DrawLine($whitePen, 139 * $scale, 135 * $scale, 190 * $scale, 92 * $scale)
+        $graphics.DrawLine($whitePen, 139 * $scale, 135 * $scale, 216 * $scale, 135 * $scale)
+        $graphics.DrawLine($whitePen, 139 * $scale, 135 * $scale, 190 * $scale, 178 * $scale)
+        foreach ($point in @(@(139,135,10), @(216,92,12), @(216,135,12), @(216,178,12))) {
+            $graphics.FillEllipse($white, ($point[0]-$point[2])*$scale, ($point[1]-$point[2])*$scale, (2*$point[2])*$scale, (2*$point[2])*$scale)
+        }
 
         $bitmap.Save($stream, [System.Drawing.Imaging.ImageFormat]::Png)
         Write-Output -NoEnumerate $stream.ToArray()
     }
     finally {
         $stream.Dispose()
-        $darkPen.Dispose()
         $whitePen.Dispose()
-        $tealPen.Dispose()
         $background.Dispose()
-        $paper.Dispose()
-        $blue.Dispose()
+        $white.Dispose()
         $graphics.Dispose()
         $bitmap.Dispose()
     }

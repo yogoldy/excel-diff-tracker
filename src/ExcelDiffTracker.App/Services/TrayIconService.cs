@@ -24,7 +24,7 @@ public sealed class TrayIconService : IDisposable
         _icon = new System.Windows.Forms.NotifyIcon
         {
             Icon = _stateIcon,
-            Text = "Excel Diff Tracker — tracking is active",
+            Text = $"{AppBrand.ProductName} — tracking is active",
             Visible = true,
             ContextMenuStrip = BuildMenu()
         };
@@ -44,7 +44,7 @@ public sealed class TrayIconService : IDisposable
     private System.Windows.Forms.ContextMenuStrip BuildMenu()
     {
         var menu = new System.Windows.Forms.ContextMenuStrip();
-        menu.Items.Add("Open Excel Diff Tracker", null, (_, _) => ShowWindow());
+        menu.Items.Add("Open Excel Scenario Analysis Tool", null, (_, _) => ShowWindow());
         menu.Items.Add("Add workbook…", null, (_, _) =>
         {
             ShowWindow();
@@ -73,7 +73,7 @@ public sealed class TrayIconService : IDisposable
             if (captureEvent.Kind is CaptureEventKind.Captured or CaptureEventKind.NoTrackedChanges or CaptureEventKind.Failed)
             {
                 _icon.BalloonTipTitle = captureEvent.Kind == CaptureEventKind.Failed ? "Capture needs attention" : "Workbook save captured";
-                _icon.BalloonTipText = captureEvent.Message ?? "Excel Diff Tracker updated the local history.";
+                _icon.BalloonTipText = captureEvent.Message ?? "Excel Scenario Analysis Tool updated the local history.";
                 _icon.BalloonTipIcon = captureEvent.Kind == CaptureEventKind.Failed ? System.Windows.Forms.ToolTipIcon.Warning : System.Windows.Forms.ToolTipIcon.Info;
                 _icon.ShowBalloonTip(4_000);
             }
@@ -112,11 +112,11 @@ public sealed class TrayIconService : IDisposable
         _stateIcon = replacement;
         _icon.Text = state switch
         {
-            TrayState.Processing => "Excel Diff Tracker — processing",
-            TrayState.Paused => "Excel Diff Tracker — paused",
-            TrayState.Warning => "Excel Diff Tracker — attention needed",
-            _ when noWorkbooks => "Excel Diff Tracker — no workbooks yet",
-            _ => "Excel Diff Tracker — tracking is active"
+            TrayState.Processing => $"{AppBrand.ProductName} — processing",
+            TrayState.Paused => $"{AppBrand.ProductName} — paused",
+            TrayState.Warning => $"{AppBrand.ProductName} — attention needed",
+            _ when noWorkbooks => $"{AppBrand.ProductName} — no workbooks yet",
+            _ => $"{AppBrand.ProductName} — tracking is active"
         };
     }
 

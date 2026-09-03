@@ -33,7 +33,7 @@ function Get-WindowsState {
 }
 
 function Get-ProductProcess {
-    $items = @(Get-Process -Name ExcelDiffTracker -ErrorAction SilentlyContinue | Where-Object { -not $_.HasExited })
+    $items = @(Get-Process -Name ExcelScenarioAnalysisTool -ErrorAction SilentlyContinue | Where-Object { -not $_.HasExited })
     if ($items.Count -ne 1) { throw "Expected exactly one running product process; found $($items.Count)." }
     $item = $items[0]
     $null = & (Join-Path $PSScriptRoot 'Test-SingleFilePayload.ps1') -ExecutablePath $item.Path
@@ -78,12 +78,12 @@ function Restart-Product {
     Stop-Process -Id $Process.Id
     Wait-AcceptanceCondition -TimeoutSeconds 20 -FailureMessage 'The prior product process did not exit for the restart test.' -Condition { $null -eq (Get-Process -Id $Process.Id -ErrorAction SilentlyContinue) }
     $started = Start-Process -FilePath $path -PassThru
-    $window = Find-UiaWindow -Title 'Excel Diff Tracker' -ProcessId $started.Id -TimeoutSeconds 30
+    $window = Find-UiaWindow -Title 'Excel Scenario Analysis Tool' -ProcessId $started.Id -TimeoutSeconds 30
     [pscustomobject]@{ process = Get-Process -Id $started.Id; window = $window }
 }
 
 $states = [System.Collections.Generic.List[object]]::new(); $restarts = [System.Collections.Generic.List[object]]::new()
-$product = Get-ProductProcess; $main = Find-UiaWindow -Title 'Excel Diff Tracker' -ProcessId $product.Id -TimeoutSeconds 20
+$product = Get-ProductProcess; $main = Find-UiaWindow -Title 'Excel Scenario Analysis Tool' -ProcessId $product.Id -TimeoutSeconds 20
 foreach ($theme in @('Light','Dark','System')) {
     Set-SelectedTheme $main $theme
     $before = Save-State "restart-$($theme.ToLowerInvariant())-before" $product $main; $states.Add($before)
@@ -98,14 +98,14 @@ $transitionPid = $product.Id; $transitionStart = $product.StartTime.ToUniversalT
 $initial = Get-WindowsState
 if ($initial.appTheme -ne $ExpectedInitialWindowsAppTheme -or $initial.highContrast -ne $ExpectedInitialHighContrast) { throw 'Measured initial Windows theme/high-contrast state does not match the requested lifecycle transition.' }
 $initialState = Save-State 'transition-initial' $product $main; $states.Add($initialState)
-Write-Host "Change Windows app theme to $ExpectedChangedWindowsAppTheme without closing Excel Diff Tracker. Waiting up to $TransitionTimeoutSeconds seconds..."
+Write-Host "Change Windows app theme to $ExpectedChangedWindowsAppTheme without closing Excel Scenario Analysis Tool. Waiting up to $TransitionTimeoutSeconds seconds..."
 Wait-AcceptanceCondition -TimeoutSeconds $TransitionTimeoutSeconds -FailureMessage 'The requested Windows app-theme transition was not observed.' -Condition {
     $live = Get-Process -Id $transitionPid -ErrorAction SilentlyContinue; if ($null -eq $live) { throw 'The identified product process exited during the Windows app-theme transition.' }
     $observed = Get-WindowsState; $observed.appTheme -eq $ExpectedChangedWindowsAppTheme -and $observed.highContrast -eq $ExpectedInitialHighContrast
 }
 Start-Sleep -Milliseconds 1000
 $appThemeState = Save-State 'transition-app-theme-changed' $product $main; $states.Add($appThemeState)
-Write-Host "Change Windows high contrast to $ExpectedChangedHighContrast without closing Excel Diff Tracker. Waiting up to $TransitionTimeoutSeconds seconds..."
+Write-Host "Change Windows high contrast to $ExpectedChangedHighContrast without closing Excel Scenario Analysis Tool. Waiting up to $TransitionTimeoutSeconds seconds..."
 Wait-AcceptanceCondition -TimeoutSeconds $TransitionTimeoutSeconds -FailureMessage 'The requested Windows high-contrast transition was not observed.' -Condition {
     $live = Get-Process -Id $transitionPid -ErrorAction SilentlyContinue; if ($null -eq $live) { throw 'The identified product process exited during the Windows high-contrast transition.' }
     (Get-WindowsState).highContrast -eq $ExpectedChangedHighContrast

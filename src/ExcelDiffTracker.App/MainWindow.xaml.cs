@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using ExcelDiffTracker.App.Services;
 using ExcelDiffTracker.App.ViewModels;
 
@@ -8,11 +9,14 @@ namespace ExcelDiffTracker.App;
 
 public partial class MainWindow : Window
 {
+    private readonly WindowThemeService _windowTheme;
+
     public MainWindow(AppServices services)
     {
         InitializeComponent();
         ViewModel = new MainViewModel(services);
         DataContext = ViewModel;
+        _windowTheme = WindowThemeService.Attach(this, services.Themes);
     }
 
     public MainViewModel ViewModel { get; }
@@ -23,7 +27,11 @@ public partial class MainWindow : Window
         {
             args.Cancel = true;
             Hide();
-            ViewModel.ShowToast("Excel Diff Tracker is still running in the notification area.");
+            ViewModel.ShowToast("Excel Scenario Analysis Tool is still running in the notification area.");
+        }
+        else
+        {
+            _windowTheme.Dispose();
         }
     }
 
@@ -31,5 +39,15 @@ public partial class MainWindow : Window
     {
         if (IsLoaded && ViewModel.ApplyThemeCommand.CanExecute(null))
             ViewModel.ApplyThemeCommand.Execute(null);
+    }
+
+    private void OnMoreMenuClick(object sender, RoutedEventArgs args)
+    {
+        if (sender is Button { ContextMenu: { } menu } button)
+        {
+            menu.PlacementTarget = button;
+            menu.Placement = PlacementMode.Left;
+            menu.IsOpen = true;
+        }
     }
 }

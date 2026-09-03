@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [ValidatePattern('^\d+\.\d+\.\d+([-.][0-9A-Za-z.-]+)?$')]
-    [string]$Version = '0.1.2',
+    [string]$Version = '0.2.0',
     [ValidateSet('Debug', 'Release')]
     [string]$Configuration = 'Release',
     [switch]$SkipInstaller
@@ -19,6 +19,7 @@ $release = Join-Path $artifacts 'release'
 $icon = Join-Path $branding 'app-icon.ico'
 $wingetManifestRelative = "packaging/winget/yogoldy.ExcelDiffTracker/$Version/yogoldy.ExcelDiffTracker.installer.yaml"
 $wingetManifest = Join-Path $repositoryRoot $wingetManifestRelative.Replace('/', [System.IO.Path]::DirectorySeparatorChar)
+$hasWingetManifest = Test-Path $wingetManifest -PathType Leaf
 
 $sourceCommit = (& git -C $repositoryRoot rev-parse HEAD).Trim().ToLowerInvariant()
 if ($LASTEXITCODE -ne 0 -or $sourceCommit -notmatch '^[a-f0-9]{40}$') {
@@ -28,15 +29,11 @@ $dirtySource = @(& git -C $repositoryRoot status --porcelain --untracked-files=a
 if ($LASTEXITCODE -ne 0 -or $dirtySource.Count -ne 0) {
     throw 'The source tree must be clean before building a release candidate.'
 }
-if (-not (Test-Path $wingetManifest -PathType Leaf)) {
-    throw "The candidate WinGet manifest is missing: $wingetManifest"
-}
-
 function Get-SourceManifestContent {
     $trackedFiles = @(& git -C $repositoryRoot ls-files)
     if ($LASTEXITCODE -ne 0 -or $trackedFiles.Count -eq 0) { throw 'Could not enumerate tracked source files.' }
-    $includedFiles = @($trackedFiles | Where-Object { $_ -ne $wingetManifestRelative } | Sort-Object)
-    if ($includedFiles.Count -ne ($trackedFiles.Count - 1)) {
+    $includedFiles = if ($hasWingetManifest) { @($trackedFiles | Where-Object { $_ -ne $wingetManifestRelative } | Sort-Object) } else { @($trackedFiles | Sort-Object) }
+    if ($hasWingetManifest -and $includedFiles.Count -ne ($trackedFiles.Count - 1)) {
         throw 'The generated WinGet hash manifest must be the one and only source-manifest exclusion.'
     }
     $lines = foreach ($relative in $includedFiles) {
@@ -73,19 +70,26 @@ $sourceManifestPath = Join-Path $publish 'BUILD-SOURCE-SHA256SUMS.txt'
 $sourceManifestHash = (Get-FileHash -LiteralPath $sourceManifestPath -Algorithm SHA256).Hash.ToUpperInvariant()
 $buildIdentity = [ordered]@{
     schemaVersion = 1
-    product = 'Excel Diff Tracker'
+    product = 'Excel Scenario Analysis Tool'
     version = $Version
     sourceCommit = $sourceCommit
     sourceManifest = 'BUILD-SOURCE-SHA256SUMS.txt'
     sourceManifestSha256 = $sourceManifestHash
     sourceFileCount = $sourceManifest.FileCount
-    excludedGeneratedPath = $wingetManifestRelative
+    excludedGeneratedPath = if ($hasWingetManifest) { $wingetManifestRelative } else { $null }
     createdUtc = [DateTime]::UtcNow.ToString('O')
 }
 [System.IO.File]::WriteAllText(
     (Join-Path $publish 'BUILD-IDENTITY.json'),
     ($buildIdentity | ConvertTo-Json -Depth 5),
     [System.Text.UTF8Encoding]::new($false))
+& (Join-Path $PSScriptRoot 'acceptance\Test-BuildIdentity.ps1') `
+    -IdentityPath (Join-Path $publish 'BUILD-IDENTITY.json') `
+    -SourceManifestPath $sourceManifestPath `
+    -RepositoryRoot $repositoryRoot `
+    -ExpectedVersion $Version `
+    -ExpectedSourceCommit $sourceCommit
+if ($LASTEXITCODE -ne 0) { throw 'Candidate build identity validation failed.' }
 
 $acceptanceProbeProject = Join-Path $repositoryRoot 'tools\ExcelDiffTracker.AcceptanceProbe\ExcelDiffTracker.AcceptanceProbe.csproj'
 dotnet publish $acceptanceProbeProject -c $Configuration -r win-arm64 --self-contained true --no-restore -o $acceptanceTools
@@ -94,7 +98,7 @@ if ($LASTEXITCODE -ne 0) { throw 'ARM64 acceptance-probe publish failed.' }
 # The frozen EXE hashes must cover all executable product/probe code, including
 # managed assemblies and native runtime libraries. Symbols and notices may remain external.
 foreach ($payload in @(
-    @{ Directory = $publish; Executable = 'ExcelDiffTracker.exe' },
+    @{ Directory = $publish; Executable = 'ExcelScenarioAnalysisTool.exe' },
     @{ Directory = $acceptanceTools; Executable = 'ExcelDiffTracker.AcceptanceProbe.exe' }
 )) {
     if (-not (Test-Path -LiteralPath (Join-Path $payload.Directory $payload.Executable) -PathType Leaf)) {
@@ -179,7 +183,7 @@ if (-not $SkipInstaller) {
     & $compiler "/DMyAppVersion=$Version" $installerScript
     if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }
 
-    $installer = Join-Path $artifacts 'installer\ExcelDiffTracker-Setup-arm64.exe'
+    $installer = Join-Path $artifacts 'installer\ExcelScenarioAnalysisTool-Setup-arm64.exe'
     if (-not (Test-Path $installer)) { throw 'The expected installer was not produced.' }
     Copy-Item $installer $release
 

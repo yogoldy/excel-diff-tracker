@@ -29,33 +29,31 @@ public static class AppIconFactory
             _ => Color.FromArgb(40, 122, 104)
         };
         using var fill = new SolidBrush(primary);
-        using var white = new Pen(Color.White, 1.8f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
-        using var outline = new Pen(Color.White, 1.5f);
+        using var white = new Pen(Color.White, 1.7f) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
 
         graphics.FillRoundedRectangle(fill, new RectangleF(2, 2, 28, 28), 7);
-        var page = new RectangleF(7, 5.5f, 15, 20);
-        graphics.DrawRoundedRectangle(outline, page, 2);
-        graphics.DrawLine(white, 10, 11, 19, 11);
-        graphics.DrawLine(white, 10, 15, 17, 15);
-        graphics.DrawLine(white, 10, 19, 15, 19);
-        graphics.DrawEllipse(outline, 17, 17, 10, 10);
+        graphics.DrawRoundedRectangle(white, new RectangleF(5, 6, 11, 20), 1.5f);
+        graphics.DrawLine(white, 5, 12, 16, 12);
+        graphics.DrawLine(white, 5, 19, 16, 19);
+        graphics.DrawLine(white, 10.5f, 6, 10.5f, 26);
+        graphics.DrawLine(white, 13, 16, 17, 16);
+        graphics.DrawLine(white, 17, 16, 23, 10);
+        graphics.DrawLine(white, 17, 16, 25, 16);
+        graphics.DrawLine(white, 17, 16, 23, 22);
+        graphics.FillEllipse(Brushes.White, 22, 8.5f, 3, 3);
+        graphics.FillEllipse(Brushes.White, 24, 14.5f, 3, 3);
+        graphics.FillEllipse(Brushes.White, 22, 20.5f, 3, 3);
         switch (state)
         {
             case TrayState.Warning:
-                graphics.DrawLine(white, 22, 19, 22, 22.5f);
-                graphics.FillEllipse(Brushes.White, 21.1f, 24, 1.8f, 1.8f);
+                graphics.FillEllipse(Brushes.White, 25, 25, 5, 5);
                 break;
             case TrayState.Paused:
-                graphics.DrawLine(white, 20.5f, 19.5f, 20.5f, 24.5f);
-                graphics.DrawLine(white, 23.5f, 19.5f, 23.5f, 24.5f);
+                graphics.DrawLine(white, 26, 25, 26, 29);
+                graphics.DrawLine(white, 29, 25, 29, 29);
                 break;
             case TrayState.Processing:
-                graphics.DrawArc(white, 19, 19, 6, 6, 25, 275);
-                graphics.DrawLine(white, 24.5f, 19, 25.5f, 21);
-                break;
-            default:
-                graphics.DrawLine(white, 19.5f, 22, 21.5f, 24);
-                graphics.DrawLine(white, 21.5f, 24, 25, 19.8f);
+                graphics.DrawArc(white, 24, 24, 6, 6, 25, 275);
                 break;
         }
 
