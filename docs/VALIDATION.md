@@ -14,7 +14,7 @@ This establishes source-level checks, artifact identity, successful launch, sele
 
 ## 0.1.2 existing-profile upgrade and sign-in (2026-09-03 UTC)
 
-Current phase: installed candidate entering maintainer-led everyday use. See [Project status](PROJECT_STATUS.md) for working preferences and next steps. Source through `3fb6304e6d95f0b1b83180d065f3e8be8ce5cfc7` is on `main`; this is not a published or fully qualified 0.1.2 release.
+Historical phase at this checkpoint: installed 0.1.2 candidate entering maintainer-led everyday use. See [Project status](PROJECT_STATUS.md) for the current phase and next steps. Source through `3fb6304e6d95f0b1b83180d065f3e8be8ce5cfc7` is on `main`; this is not a published or fully qualified 0.1.2 release.
 
 - Frozen build: zero warnings/errors, 26/26 automated C# tests passed, 33 PowerShell files parsed, 112 isolated PowerShell regression checks passed, and 48 numeric palette contrast checks passed. Numeric contrast checks do not establish visual acceptance.
 - Candidate installer SHA-256: `9536373FCC47119D2C10A75C8E6D8F1BFC2BF38FDF08639DD27790D95422133A`.
