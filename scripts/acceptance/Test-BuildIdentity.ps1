@@ -33,8 +33,15 @@ if ($hasGeneratedManifest) {
 
 $manifestHash = (Get-FileHash -LiteralPath $sourceManifestPath -Algorithm SHA256).Hash.ToUpperInvariant()
 Require-Condition ($identity.sourceManifestSha256 -eq $manifestHash) 'source manifest hash differs'
-$createdUtc = [DateTime]::MinValue
-Require-Condition ([DateTime]::TryParse([string]$identity.createdUtc, [ref]$createdUtc) -and $createdUtc.ToUniversalTime() -le [DateTime]::UtcNow.AddMinutes(5)) 'build timestamp is missing or invalid'
+$createdUtc = if ($identity.createdUtc -is [DateTime]) {
+    ([DateTime]$identity.createdUtc).ToUniversalTime()
+} else {
+    [DateTime]::Parse(
+        [string]$identity.createdUtc,
+        [Globalization.CultureInfo]::InvariantCulture,
+        [Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+}
+Require-Condition ($createdUtc -le [DateTime]::UtcNow.AddMinutes(5)) 'build timestamp is missing or invalid'
 
 $headCommit = (& git -C $repositoryRoot rev-parse HEAD).Trim().ToLowerInvariant()
 Require-Condition ($LASTEXITCODE -eq 0 -and $headCommit -match '^[a-f0-9]{40}$') 'current release commit cannot be resolved'
