@@ -180,7 +180,7 @@ function Set-WorkbookReportDirectory {
     $ancestor = $pathElement
     $button = $null
     for ($index = 0; $index -lt 8 -and $ancestor; $index++) {
-        $button = Find-UiaElement -Root $ancestor -Name 'Report folder…' -Optional
+        $button = Find-UiaElement -Root $ancestor -Name ('Report folder' + [char]0x2026) -Optional
         if ($button) { break }
         $ancestor = $walker.GetParent($ancestor)
     }
@@ -355,6 +355,39 @@ function Invoke-ProbeWait {
     throw "AcceptanceProbe did not reach the required state within $TimeoutSeconds seconds. See $OutputPath"
 }
 
+function Assert-RecoveryLiteralDelta {
+    param([object] $Phase, [string] $Address, [string] $BeforeValue, [string] $AfterValue)
+    $observed = $Phase.result
+    Assert-RecoveryCondition ($observed.latestVersion.cellChangeCount -eq 1 -and $observed.latestVersion.sheetChangeCount -eq 0) "$($Phase.name) must contain exactly one changed cell and no sheet changes."
+    Assert-RecoveryCondition ($observed.latestVersion.sequence -eq $observed.currentSequence -and $observed.latestVersion.sha256 -ceq $observed.currentHash) "$($Phase.name) latest version differs from its captured state."
+    Assert-RecoveryCondition ($observed.cellChange.sheetName -ceq 'Recovery' -and $observed.cellChange.address -ceq $Address -and $observed.cellChange.kinds -ceq 'LiteralChanged') "$($Phase.name) changed the wrong cell or change kind."
+    $before = $observed.cellChange.beforeJson | ConvertFrom-Json
+    $after = $observed.cellChange.afterJson | ConvertFrom-Json
+    Assert-RecoveryCondition ($before.literalValue -ceq $BeforeValue -and $after.literalValue -ceq $AfterValue) "$($Phase.name) literal contents differ from the fixture mutation."
+    foreach ($state in @($before,$after)) {
+        Assert-RecoveryCondition ($state.sheetName -ceq 'Recovery' -and $state.address -ceq $Address -and $state.cellType -ceq 'SharedString') "$($Phase.name) cell identity or type differs."
+        foreach ($field in @('formulaText','formulaType','formulaReference','formulaSharedIndex','formulaXml','cachedResult')) {
+            Assert-RecoveryCondition ($null -eq $state.$field) "$($Phase.name) unexpectedly contains formula data: $field."
+        }
+    }
+    if ($observed.latestVersion.reportStatus -eq 'Ready') {
+        Assert-RecoveryCondition ($null -ne $Phase.report) "$($Phase.name) has no retained ready report."
+        $markdown = [System.IO.File]::ReadAllText((Join-Path $evidence $Phase.report.path))
+        $requiredLines = @(
+            "- Version: $($observed.currentSequence)",
+            "- Current SHA-256: ``$($observed.currentHash)``",
+            '| Sheet changes | 0 |','| Changed cells | 1 |','| Literal value changes | 1 |',
+            '| Formula text changes | 0 |','| Calculated result changes | 0 |','| Cell type changes | 0 |',
+            "### Recovery!$Address",'**Changes:** Literal changed',
+            '| Type | <pre>SharedString</pre> | <pre>SharedString</pre> |',
+            "| Literal value | <pre>$BeforeValue</pre> | <pre>$AfterValue</pre> |")
+        foreach ($line in $requiredLines) {
+            Assert-RecoveryCondition ([regex]::Matches($markdown,('(?m)^' + [regex]::Escape($line) + '\r?$')).Count -eq 1) "$($Phase.name) report omits or duplicates the expected line: $line"
+        }
+        Assert-RecoveryCondition ([regex]::Matches($markdown,'(?m)^### ').Count -eq 1) "$($Phase.name) report contains an unexpected cell detail."
+    }
+}
+
 function Add-ProbePhase {
     param(
         [string] $Name,
@@ -362,11 +395,17 @@ function Add-ProbePhase {
         [string[]] $Arguments,
         [int] $TimeoutSeconds = 90,
         [string] $ExpectedSourceSha256 = '',
+        [string] $ExpectedBeforeValue = '',
+        [string] $ExpectedAfterValue = '',
+        [string] $ExpectedAddress = 'A1',
         [switch] $SourceInaccessible
     )
     $scenarioId = $activeScenario.id
     $safeName = ($Name -replace '[^A-Za-z0-9_.-]','-').ToLowerInvariant()
     $probePath = Join-Path (Join-Path $probeDirectory $scenarioId) ($safeName + '.json')
+    if (-not [string]::IsNullOrWhiteSpace($ExpectedAfterValue)) {
+        $Arguments += @('--address',$ExpectedAddress,'--expected-kind','LiteralChanged','--expected-before-value',$ExpectedBeforeValue,'--expected-value',$ExpectedAfterValue,'--expected-cell-change-count','1','--expected-sheet-change-count','0')
+    }
     $probeResult = Invoke-ProbeWait -WorkbookPath $WorkbookPath -Arguments $Arguments -OutputPath $probePath -TimeoutSeconds $TimeoutSeconds
     $sourceRecord = [pscustomobject]@{ exists = Test-Path $WorkbookPath -PathType Leaf; inaccessible = [bool]$SourceInaccessible; path = $null; sha256 = $null; bytes = $null }
     if ($sourceRecord.exists -and -not $SourceInaccessible) {
@@ -386,7 +425,7 @@ function Add-ProbePhase {
         Copy-SharedFile -Source $probeResult.latestVersion.reportPath -Destination $reportPath
         $reportRecord = Get-FileRecord $reportPath
     }
-    $activeScenario.phases.Add([pscustomobject]@{
+    $phase = [pscustomobject]@{
         name = $Name
         observedUtc = [DateTime]::UtcNow.ToString('O')
         workbookPath = $WorkbookPath
@@ -396,7 +435,11 @@ function Add-ProbePhase {
         database = @(Copy-DatabaseEvidence -ScenarioId $scenarioId -PhaseName $Name)
         report = $reportRecord
         result = $probeResult
-    })
+    }
+    $activeScenario.phases.Add($phase)
+    if (-not [string]::IsNullOrWhiteSpace($ExpectedAfterValue)) {
+        Assert-RecoveryLiteralDelta -Phase $phase -Address $ExpectedAddress -BeforeValue $ExpectedBeforeValue -AfterValue $ExpectedAfterValue
+    }
     $probeResult
 }
 
@@ -471,6 +514,8 @@ try {
     Assert-RecoveryCondition (Test-Path $database -PathType Leaf) "Installed database is missing: $database"
     $installerHash = Get-AcceptanceFileSha256 -Path $installer
     $applicationHash = Get-AcceptanceFileSha256 -Path $application
+    $null = & (Join-Path $PSScriptRoot 'Test-SingleFilePayload.ps1') -ExecutablePath $application
+    $null = & (Join-Path $PSScriptRoot 'Test-SingleFilePayload.ps1') -ExecutablePath $probe
     $probeHash = Get-AcceptanceFileSha256 -Path $probe
     Assert-RecoveryCondition ($installerHash -eq $ExpectedInstallerSha256.ToUpperInvariant()) 'Installer SHA-256 differs from the frozen candidate.'
     Assert-RecoveryCondition ($applicationHash -eq $ExpectedApplicationSha256.ToUpperInvariant()) 'Installed executable SHA-256 differs from the frozen candidate.'
@@ -484,7 +529,7 @@ try {
             $compatibleStarted = [DateTime]::UtcNow
             Set-WorkbookValue -Path $path -Value 'compatible-lock-save'
             $hash1 = Get-AcceptanceFileSha256 -Path $path
-            $p1 = Add-ProbePhase -Name 'compatible-lock-captured' -WorkbookPath $path -Arguments @('--expected-sequence','1','--expected-version-count','1','--expected-error-count','0','--require-active','--require-no-last-error','--require-unique-version-hashes','--require-source-hash-match','--require-ready-report') -TimeoutSeconds $ShortLockSeconds -ExpectedSourceSha256 $hash1
+            $p1 = Add-ProbePhase -Name 'compatible-lock-captured' -WorkbookPath $path -Arguments @('--expected-sequence','1','--expected-version-count','1','--expected-error-count','0','--require-active','--require-no-last-error','--require-unique-version-hashes','--require-source-hash-match','--require-ready-report') -TimeoutSeconds $ShortLockSeconds -ExpectedSourceSha256 $hash1 -ExpectedBeforeValue 'baseline' -ExpectedAfterValue 'compatible-lock-save'
             $remainingMilliseconds = [math]::Ceiling(($ShortLockSeconds - ([DateTime]::UtcNow - $compatibleStarted).TotalSeconds) * 1000)
             if ($remainingMilliseconds -gt 0) { Start-Sleep -Milliseconds $remainingMilliseconds }
             $compatibleFinished = [DateTime]::UtcNow
@@ -498,11 +543,11 @@ try {
         $exclusiveStarted = [DateTime]::UtcNow
         try {
             Start-Sleep -Seconds $ShortLockSeconds
-            $null = Add-ProbePhase -Name 'exclusive-lock-held' -WorkbookPath $path -Arguments @('--expected-sequence','1','--expected-version-count','1','--expected-error-count','0','--expected-status','Processing','--require-no-last-error','--require-unique-version-hashes') -TimeoutSeconds 5 -ExpectedSourceSha256 $hash2 -SourceInaccessible
+            $null = Add-ProbePhase -Name 'exclusive-lock-held' -WorkbookPath $path -Arguments @('--expected-sequence','1','--expected-version-count','1','--expected-error-count','0','--expected-status','Processing','--require-no-last-error','--require-unique-version-hashes') -TimeoutSeconds 5 -ExpectedSourceSha256 $hash2 -SourceInaccessible -ExpectedBeforeValue 'baseline' -ExpectedAfterValue 'compatible-lock-save'
         }
         finally { $exclusive.Dispose(); $exclusiveFinished = [DateTime]::UtcNow }
         Add-ManualPhase -Name 'exclusive-lock-window' -Detail ([pscustomobject]@{ startedUtc=$exclusiveStarted.ToString('O'); releasedUtc=$exclusiveFinished.ToString('O'); heldSeconds=[math]::Round(($exclusiveFinished-$exclusiveStarted).TotalSeconds,3) })
-        $null = Add-ProbePhase -Name 'exclusive-lock-recovered' -WorkbookPath $path -Arguments @('--expected-sequence','2','--expected-version-count','2','--expected-error-count','0','--require-active','--require-no-last-error','--require-unique-version-hashes','--require-source-hash-match','--require-ready-report') -TimeoutSeconds 30 -ExpectedSourceSha256 $hash2
+        $null = Add-ProbePhase -Name 'exclusive-lock-recovered' -WorkbookPath $path -Arguments @('--expected-sequence','2','--expected-version-count','2','--expected-error-count','0','--require-active','--require-no-last-error','--require-unique-version-hashes','--require-source-hash-match','--require-ready-report') -TimeoutSeconds 30 -ExpectedSourceSha256 $hash2 -ExpectedBeforeValue 'compatible-lock-save' -ExpectedAfterValue 'exclusive-lock-save'
     }
 
     Invoke-RecoveryScenario 'atomic-replacement' {
@@ -512,7 +557,7 @@ try {
         New-WorkbookFixture -Path $replacement -Value 'atomic-replacement-value'
         $hash = Get-AcceptanceFileSha256 -Path $replacement
         Replace-WorkbookAtomically -Replacement $replacement -Target $path -Backup $backup
-        $null = Add-ProbePhase -Name 'replacement-captured' -WorkbookPath $path -Arguments @('--expected-sequence','1','--expected-version-count','1','--expected-error-count','0','--require-active','--require-no-last-error','--require-unique-version-hashes','--require-source-hash-match','--require-ready-report') -ExpectedSourceSha256 $hash
+        $null = Add-ProbePhase -Name 'replacement-captured' -WorkbookPath $path -Arguments @('--expected-sequence','1','--expected-version-count','1','--expected-error-count','0','--require-active','--require-no-last-error','--require-unique-version-hashes','--require-source-hash-match','--require-ready-report') -ExpectedSourceSha256 $hash -ExpectedBeforeValue 'baseline' -ExpectedAfterValue 'atomic-replacement-value'
     }
 
     Invoke-RecoveryScenario 'save-as-path-behavior' {
@@ -544,7 +589,7 @@ try {
         }
         $finalHash = $states[$states.Count - 1].sha256
         Add-ManualPhase -Name 'ordered-write-manifest' -Detail ([pscustomobject]@{ transport = 'AutoSave-equivalent ordered atomic write burst'; writes = @($states | ForEach-Object { $record = Get-FileRecord $_.path; [pscustomobject]@{ order=$_.order; path=$record.path; sha256=$record.sha256; bytes=$record.bytes } }) })
-        $null = Add-ProbePhase -Name 'burst-deduplicated' -WorkbookPath $path -Arguments @('--expected-sequence','1','--expected-version-count','1','--expected-error-count','0','--require-active','--require-no-last-error','--require-unique-version-hashes','--require-source-hash-match','--require-ready-report') -TimeoutSeconds 30 -ExpectedSourceSha256 $finalHash
+        $null = Add-ProbePhase -Name 'burst-deduplicated' -WorkbookPath $path -Arguments @('--expected-sequence','1','--expected-version-count','1','--expected-error-count','0','--require-active','--require-no-last-error','--require-unique-version-hashes','--require-source-hash-match','--require-ready-report') -TimeoutSeconds 30 -ExpectedSourceSha256 $finalHash -ExpectedBeforeValue 'baseline' -ExpectedAfterValue 'burst-5'
     }
 
     Invoke-RecoveryScenario 'two-workbook-isolation' {
@@ -560,11 +605,11 @@ try {
         $lock = Open-ExclusiveWorkbookLock -Path $pathA
         try {
             Replace-WorkbookAtomically -Replacement $replacementB -Target $pathB -Backup (Join-Path $fixtures 'isolation-b-old.xlsx')
-            $null = Add-ProbePhase -Name 'unlocked-b-captured' -WorkbookPath $pathB -Arguments @('--expected-sequence','1','--expected-version-count','1','--expected-error-count','0','--require-active','--require-no-last-error','--require-unique-version-hashes','--require-source-hash-match','--require-ready-report') -TimeoutSeconds 20 -ExpectedSourceSha256 $hashB
+            $null = Add-ProbePhase -Name 'unlocked-b-captured' -WorkbookPath $pathB -Arguments @('--expected-sequence','1','--expected-version-count','1','--expected-error-count','0','--require-active','--require-no-last-error','--require-unique-version-hashes','--require-source-hash-match','--require-ready-report') -TimeoutSeconds 20 -ExpectedSourceSha256 $hashB -ExpectedBeforeValue 'baseline' -ExpectedAfterValue 'free-b'
             $null = Add-ProbePhase -Name 'locked-a-not-advanced' -WorkbookPath $pathA -Arguments @('--expected-sequence','0','--expected-version-count','0','--expected-error-count','0','--expected-status','Processing','--require-no-last-error','--require-unique-version-hashes') -TimeoutSeconds 5 -ExpectedSourceSha256 $hashA -SourceInaccessible
         }
         finally { $lock.Dispose() }
-        $null = Add-ProbePhase -Name 'locked-a-recovered' -WorkbookPath $pathA -Arguments @('--expected-sequence','1','--expected-version-count','1','--expected-error-count','0','--require-active','--require-no-last-error','--require-unique-version-hashes','--require-source-hash-match','--require-ready-report') -TimeoutSeconds 30 -ExpectedSourceSha256 $hashA
+        $null = Add-ProbePhase -Name 'locked-a-recovered' -WorkbookPath $pathA -Arguments @('--expected-sequence','1','--expected-version-count','1','--expected-error-count','0','--require-active','--require-no-last-error','--require-unique-version-hashes','--require-source-hash-match','--require-ready-report') -TimeoutSeconds 30 -ExpectedSourceSha256 $hashA -ExpectedBeforeValue 'baseline' -ExpectedAfterValue 'locked-a'
     }
 
     Invoke-RecoveryScenario 'missing-file-restoration' {
@@ -572,11 +617,12 @@ try {
         $missingCopy = Join-Path $fixtures 'missing-file-held.xlsx'
         Move-Item -LiteralPath $path -Destination $missingCopy
         $missing = Add-ProbePhase -Name 'missing-detected' -WorkbookPath $path -Arguments @('--expected-sequence','0','--expected-version-count','0','--expected-error-count','1','--expected-status','Missing','--require-unique-version-hashes') -TimeoutSeconds ($FailureExposureSeconds + 15)
-        Assert-RecoveryCondition (-not $missing.source.exists) 'The missing phase unexpectedly found the source workbook.'
+        $missingPhase = @($activeScenario.phases | Where-Object { $_.name -eq 'missing-detected' })
+        Assert-RecoveryCondition ($missingPhase.Count -eq 1 -and -not $missingPhase[0].source.exists) 'The missing phase unexpectedly found the source workbook.'
         Set-WorkbookValue -Path $missingCopy -Value 'restored-after-missing'
         $hash = Get-AcceptanceFileSha256 -Path $missingCopy
         Move-Item -LiteralPath $missingCopy -Destination $path
-        $null = Add-ProbePhase -Name 'restoration-captured' -WorkbookPath $path -Arguments @('--expected-sequence','1','--expected-version-count','1','--expected-error-count','1','--require-active','--require-no-last-error','--require-unique-version-hashes','--require-source-hash-match','--require-ready-report') -TimeoutSeconds 30 -ExpectedSourceSha256 $hash
+        $null = Add-ProbePhase -Name 'restoration-captured' -WorkbookPath $path -Arguments @('--expected-sequence','1','--expected-version-count','1','--expected-error-count','1','--require-active','--require-no-last-error','--require-unique-version-hashes','--require-source-hash-match','--require-ready-report') -TimeoutSeconds 30 -ExpectedSourceSha256 $hash -ExpectedBeforeValue 'baseline' -ExpectedAfterValue 'restored-after-missing'
     }
 
     Invoke-RecoveryScenario 'stopped-app-restart-reconciliation' {
@@ -593,7 +639,7 @@ try {
         $stoppedSource = Get-FileRecord $path
         Add-ManualPhase -Name 'change-while-stopped' -Detail ([pscustomobject]@{ source=$stoppedSource; sourceSha256=$hash; databaseSha256Before=$databaseBefore; databaseSha256After=$databaseAfter })
         Restart-InstalledApplication
-        $null = Add-ProbePhase -Name 'restart-reconciled' -WorkbookPath $path -Arguments @('--expected-sequence','1','--expected-version-count','1','--expected-error-count','0','--require-active','--require-no-last-error','--require-unique-version-hashes','--require-source-hash-match','--require-ready-report') -TimeoutSeconds 30 -ExpectedSourceSha256 $hash
+        $null = Add-ProbePhase -Name 'restart-reconciled' -WorkbookPath $path -Arguments @('--expected-sequence','1','--expected-version-count','1','--expected-error-count','0','--require-active','--require-no-last-error','--require-unique-version-hashes','--require-source-hash-match','--require-ready-report') -TimeoutSeconds 30 -ExpectedSourceSha256 $hash -ExpectedBeforeValue 'baseline' -ExpectedAfterValue 'changed-while-stopped'
     }
 
     Invoke-RecoveryScenario 'unwritable-report-recovery' {
@@ -607,14 +653,14 @@ try {
         [System.IO.File]::WriteAllText($blocked,'This file deliberately makes the configured report target unwritable as a directory.')
         Set-WorkbookValue -Path $path -Value 'pending-report'
         $hash = Get-AcceptanceFileSha256 -Path $path
-        $pending = Add-ProbePhase -Name 'report-pending' -WorkbookPath $path -Arguments @('--expected-sequence','1','--expected-version-count','1','--expected-error-count','1','--expected-status','Warning','--require-unique-version-hashes','--require-source-hash-match') -TimeoutSeconds 30 -ExpectedSourceSha256 $hash
+        $pending = Add-ProbePhase -Name 'report-pending' -WorkbookPath $path -Arguments @('--expected-sequence','1','--expected-version-count','1','--expected-error-count','1','--expected-status','Warning','--require-unique-version-hashes','--require-source-hash-match') -TimeoutSeconds 30 -ExpectedSourceSha256 $hash -ExpectedBeforeValue 'baseline' -ExpectedAfterValue 'pending-report'
         Assert-RecoveryCondition ($pending.latestVersion.reportStatus -eq 'Pending') 'The unwritable target did not leave the committed report Pending.'
         $obstructionCopy = Join-Path $logDirectory 'report-target-obstruction.txt'
         Copy-SharedFile -Source $blocked -Destination $obstructionCopy
         Add-ManualPhase -Name 'report-target-obstruction' -Detail ([pscustomobject]@{ target=$blocked; obstruction=Get-FileRecord $obstructionCopy; reportStatus=$pending.latestVersion.reportStatus })
         Remove-Item -LiteralPath $blocked -Force
         Move-Item -LiteralPath $blockedHolding -Destination $blocked
-        $ready = Add-ProbePhase -Name 'pending-report-recovered' -WorkbookPath $path -Arguments @('--expected-sequence','1','--expected-version-count','1','--expected-error-count','1','--require-active','--require-no-last-error','--require-unique-version-hashes','--require-source-hash-match','--require-ready-report') -TimeoutSeconds 30 -ExpectedSourceSha256 $hash
+        $ready = Add-ProbePhase -Name 'pending-report-recovered' -WorkbookPath $path -Arguments @('--expected-sequence','1','--expected-version-count','1','--expected-error-count','1','--require-active','--require-no-last-error','--require-unique-version-hashes','--require-source-hash-match','--require-ready-report') -TimeoutSeconds 30 -ExpectedSourceSha256 $hash -ExpectedBeforeValue 'baseline' -ExpectedAfterValue 'pending-report'
         Assert-RecoveryCondition ($ready.latestVersion.reportStatus -eq 'Ready') 'The pending report was not completed after target recovery.'
     }
 
@@ -631,7 +677,7 @@ try {
             Assert-RecoveryCondition ($failedLarge.currentSequence -eq 0) 'The interrupted large capture advanced the baseline.'
         }
         finally { $lock.Dispose() }
-        $null = Add-ProbePhase -Name 'large-capture-recovered' -WorkbookPath $path -Arguments @('--expected-sequence','1','--expected-version-count','1','--expected-error-count','1','--require-active','--require-no-last-error','--require-unique-version-hashes','--require-source-hash-match','--require-ready-report') -TimeoutSeconds 60 -ExpectedSourceSha256 $hash
+        $null = Add-ProbePhase -Name 'large-capture-recovered' -WorkbookPath $path -Arguments @('--expected-sequence','1','--expected-version-count','1','--expected-error-count','1','--require-active','--require-no-last-error','--require-unique-version-hashes','--require-source-hash-match','--require-ready-report') -TimeoutSeconds 60 -ExpectedSourceSha256 $hash -ExpectedAddress "T$LargeWorkbookRows" -ExpectedBeforeValue "large-baseline-$($LargeWorkbookRows - 1)-19" -ExpectedAfterValue 'large-recovery-change'
     }
 
     Invoke-RecoveryScenario 'corrupt-package-rejection' {

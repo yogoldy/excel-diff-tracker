@@ -83,6 +83,30 @@ foreach ($format in @('xlsx', 'xlsm')) {
     $expectedSequences = @(1..10)
     Require-Condition (@(Compare-Object $expectedSequences @($formatSaves.sequence)).Count -eq 0) "$format sequence set is not exactly 1 through 10"
     Require-Condition (@($formatSaves.sha256 | Select-Object -Unique).Count -eq 10) "$format stable hashes are missing or duplicated"
+
+    $baselinePath = Require-EvidenceFile "probe/$format-baseline.json"
+    $baseline = Get-Content $baselinePath -Raw | ConvertFrom-Json
+    Require-Condition ($baseline.passed -eq $true -and @($baseline.failures).Count -eq 0) "$format baseline probe failed"
+    Require-Condition ($baseline.workbookStatus -eq 'Active' -and $baseline.errorCount -eq 0 -and [string]::IsNullOrWhiteSpace($baseline.lastError)) "$format baseline was not Active without errors"
+    Require-Condition ($baseline.currentSequence -eq 0 -and $baseline.versionCount -eq 0 -and $baseline.distinctVersionHashCount -eq 0 -and $null -eq $baseline.latestVersion) "$format baseline was not silent sequence zero"
+    Require-Condition ($baseline.currentHash -match '^[A-Fa-f0-9]{64}$') "$format baseline hash is missing or malformed"
+
+    $settledPath = Require-EvidenceFile "probe/$format-settled.json"
+    $settled = Get-Content $settledPath -Raw | ConvertFrom-Json
+    $lastSave = $formatSaves[-1]
+    Require-Condition ($settled.passed -eq $true -and @($settled.failures).Count -eq 0) "$format settled probe failed"
+    Require-Condition ($settled.workbookStatus -eq 'Active' -and $settled.errorCount -eq 0 -and [string]::IsNullOrWhiteSpace($settled.lastError)) "$format did not settle Active without errors"
+    Require-Condition ($settled.currentSequence -eq 10 -and $settled.versionCount -eq 10 -and $settled.distinctVersionHashCount -eq 10) "$format settled sequence or version counts differ"
+    Require-Condition ($settled.currentHash -eq $lastSave.sha256 -and $settled.latestVersion.sha256 -eq $lastSave.sha256) "$format settled hashes differ from the final save"
+    Require-Condition ($settled.latestVersion.sequence -eq 10 -and $settled.latestVersion.reportStatus -eq 'Ready' -and $settled.latestVersion.cellChangeCount -eq 1 -and $settled.latestVersion.sheetChangeCount -eq 0) "$format settled version or report differs"
+    Require-Condition ($settled.cellChange.address -eq 'Y1001' -and $settled.cellChange.kinds.Split(',') -contains 'LiteralChanged') "$format settled delta is not the final literal change"
+    $settledBefore = $settled.cellChange.beforeJson | ConvertFrom-Json
+    $settledAfter = $settled.cellChange.afterJson | ConvertFrom-Json
+    Require-Condition ($settledAfter.literalValue -eq $lastSave.value -and $settledBefore.literalValue -eq ('EDT-SOAK-{0:D2}' -f ($lastSave.index - 2))) "$format settled literal values differ from the final save"
+    $fixtureName = if ($format -eq 'xlsx') { 'Soak.xlsx' } else { 'Soak Macro.xlsm' }
+    $fixturePath = Require-EvidenceFile "fixtures/$fixtureName"
+    $fixtureHash = (Get-FileHash -LiteralPath $fixturePath -Algorithm SHA256).Hash.ToUpperInvariant()
+    Require-Condition ($fixtureHash -eq $lastSave.sha256) "$format retained final workbook hash differs from the final save"
 }
 
 for ($index = 0; $index -lt $saves.Count; $index++) {

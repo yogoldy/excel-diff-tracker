@@ -724,6 +724,8 @@ try {
         if (-not (Test-Path $startMenuShortcut)) { throw 'Start-menu shortcut is missing.' }
     } 'environment.json'
     $installedApplicationHash = Get-AcceptanceFileSha256 -Path $application
+    $null = & (Join-Path $PSScriptRoot 'Test-SingleFilePayload.ps1') -ExecutablePath $application
+    $null = & (Join-Path $PSScriptRoot 'Test-SingleFilePayload.ps1') -ExecutablePath $probe
     Invoke-Step 'installed build identity matches frozen source checkout' {
         $installedBuildIdentity = Join-Path $installDirectory 'BUILD-IDENTITY.json'
         $installedSourceManifest = Join-Path $installDirectory 'BUILD-SOURCE-SHA256SUMS.txt'

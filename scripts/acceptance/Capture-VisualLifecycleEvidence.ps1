@@ -36,6 +36,7 @@ function Get-ProductProcess {
     $items = @(Get-Process -Name ExcelDiffTracker -ErrorAction SilentlyContinue | Where-Object { -not $_.HasExited })
     if ($items.Count -ne 1) { throw "Expected exactly one running product process; found $($items.Count)." }
     $item = $items[0]
+    $null = & (Join-Path $PSScriptRoot 'Test-SingleFilePayload.ps1') -ExecutablePath $item.Path
     if ((Get-AcceptanceFileSha256 $item.Path) -ne $expectedApplicationHash) { throw 'The running product does not match the frozen application hash.' }
     $item
 }

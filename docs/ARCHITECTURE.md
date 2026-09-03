@@ -23,6 +23,12 @@ Excel Diff Tracker is a local, per-user Windows tray application built as separa
 
 The baseline advances only after extraction and the SQLite transaction succeed. Corrupt, encrypted, unsafe, or unsupported workbooks create an error record without changing it.
 
+## Release payload identity
+
+The application and external AcceptanceProbe publish as self-contained single-file ARM64 executables, including their native libraries. Each frozen executable SHA-256 therefore covers its managed code, dependencies, and runtime. The release build and installed gates reject loose DLLs or runtime configuration files alongside either executable. In-place upgrade removes the explicitly enumerated runtime files shipped by 0.1.1 from the application directory; it does not target user workbooks, history, reports, or settings. The SDK's matching build metadata supplies the exact third-party license versions; it is embedded in the delivered executable.
+
+Native libraries are extracted into the Windows user's temporary .NET bundle cache at startup. This standard [.NET single-file deployment behavior](https://learn.microsoft.com/en-us/dotnet/core/deploying/single-file/overview) requires separate installed startup and SQLite acceptance. Local supporting tests direct extraction into disposable test output.
+
 ## Formula semantics
 
 Formula XML is compared exactly as stored, as required by the product definition. Cached formula results are compared separately. Excel Diff Tracker does not calculate formulas or decide whether two formulas are mathematically equivalent.

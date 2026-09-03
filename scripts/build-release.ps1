@@ -91,6 +91,22 @@ $acceptanceProbeProject = Join-Path $repositoryRoot 'tools\ExcelDiffTracker.Acce
 dotnet publish $acceptanceProbeProject -c $Configuration -r win-arm64 --self-contained true --no-restore -o $acceptanceTools
 if ($LASTEXITCODE -ne 0) { throw 'ARM64 acceptance-probe publish failed.' }
 
+# The frozen EXE hashes must cover all executable product/probe code, including
+# managed assemblies and native runtime libraries. Symbols and notices may remain external.
+foreach ($payload in @(
+    @{ Directory = $publish; Executable = 'ExcelDiffTracker.exe' },
+    @{ Directory = $acceptanceTools; Executable = 'ExcelDiffTracker.AcceptanceProbe.exe' }
+)) {
+    if (-not (Test-Path -LiteralPath (Join-Path $payload.Directory $payload.Executable) -PathType Leaf)) {
+        throw "The single-file executable is missing: $($payload.Executable)"
+    }
+    $externalCode = @(Get-ChildItem -LiteralPath $payload.Directory -Recurse -File -Force | Where-Object {
+        $_.Extension -eq '.dll' -or ($_.Extension -eq '.exe' -and $_.Name -ne $payload.Executable) -or
+        $_.Name -like '*.deps.json' -or $_.Name -like '*.runtimeconfig*.json'
+    })
+    if ($externalCode.Count -ne 0) { throw "Executable payload escaped the frozen single-file hash: $($externalCode.FullName -join ', ')" }
+}
+
 $smokeProject = Join-Path $repositoryRoot 'tools\ExcelDiffTracker.Smoke\ExcelDiffTracker.Smoke.csproj'
 dotnet publish $smokeProject -c $Configuration -r win-arm64 --self-contained true --no-restore -o $smokeTool
 if ($LASTEXITCODE -ne 0) { throw 'ARM64 smoke-tool publish failed.' }
@@ -102,7 +118,12 @@ $dotnetLicenseDirectory = Join-Path $licenseDirectory 'dotnet'
 New-Item -ItemType Directory -Path $dotnetLicenseDirectory -Force | Out-Null
 Copy-Item (Join-Path $repositoryRoot 'licenses\Apache-2.0.txt') (Join-Path $licenseDirectory 'SQLitePCLRaw-2.1.12-Apache-2.0.txt')
 
-$runtimeConfig = Get-Content (Join-Path $publish 'ExcelDiffTracker.runtimeconfig.json') -Raw | ConvertFrom-Json
+# Single-file publishing embeds runtime/dependency JSON. Resolve the matching
+# SDK build metadata from this exact configuration/RID for the bundled licenses.
+$metadataJson = & dotnet msbuild $appProject "-p:Configuration=$Configuration" '-p:RuntimeIdentifier=win-arm64' '-getProperty:ProjectRuntimeConfigFilePath,ProjectDepsFilePath'
+if ($LASTEXITCODE -ne 0) { throw 'Could not resolve the published application metadata paths.' }
+$metadata = ($metadataJson | Out-String | ConvertFrom-Json).Properties
+$runtimeConfig = Get-Content -LiteralPath $metadata.ProjectRuntimeConfigFilePath -Raw | ConvertFrom-Json
 $coreFramework = @($runtimeConfig.runtimeOptions.includedFrameworks | Where-Object name -eq 'Microsoft.NETCore.App') | Select-Object -First 1
 $desktopFramework = @($runtimeConfig.runtimeOptions.includedFrameworks | Where-Object name -eq 'Microsoft.WindowsDesktop.App') | Select-Object -First 1
 if (-not $coreFramework -or -not $desktopFramework) { throw 'Published runtime versions could not be determined.' }
@@ -120,7 +141,7 @@ foreach ($notice in $requiredRuntimeNotices) {
     Copy-Item $notice.Source (Join-Path $dotnetLicenseDirectory $notice.Destination)
 }
 
-$dependencyManifest = Get-Content (Join-Path $publish 'ExcelDiffTracker.deps.json') -Raw | ConvertFrom-Json
+$dependencyManifest = Get-Content -LiteralPath $metadata.ProjectDepsFilePath -Raw | ConvertFrom-Json
 $windowsSdkLibrary = @($dependencyManifest.libraries.PSObject.Properties.Name | Where-Object {
     $_ -match '^(runtimepack\.)?Microsoft\.Windows\.SDK\.NET\.Ref/'
 }) | Select-Object -First 1

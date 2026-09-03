@@ -294,7 +294,7 @@ function Complete-MatrixPhase {
         action = $Action
         transport = if ($Baseline) { 'Excel COM fixture setup before tracking; installed-app UIA baseline registration' } else { 'visible Excel keyboard/UIA mutation and Ctrl+S' }
         actionStartedUtc = $ActionStartedUtc.ToString('O')
-        ctrlSaveUtc = if ($CtrlSaveUtc.HasValue) { $CtrlSaveUtc.Value.ToString('O') } else { $null }
+        ctrlSaveUtc = if ($null -ne $CtrlSaveUtc) { $CtrlSaveUtc.ToString('O') } else { $null }
         capturedUtc = $capturedUtc.ToString('O')
         captureMilliseconds = [math]::Round($phaseClock.Elapsed.TotalMilliseconds, 3)
         expectedCellChangeCount = $CellChangeCount
@@ -460,6 +460,8 @@ try {
 
     $installerHash = Get-AcceptanceFileSha256 -Path $installer
     $applicationHash = Get-AcceptanceFileSha256 -Path $application
+    $null = & (Join-Path $PSScriptRoot 'Test-SingleFilePayload.ps1') -ExecutablePath $application
+    $null = & (Join-Path $PSScriptRoot 'Test-SingleFilePayload.ps1') -ExecutablePath $probe
     $probeHash = Get-AcceptanceFileSha256 -Path $probe
     Assert-Matrix 'semantic matrix uses the frozen installer' ($installerHash -eq $ExpectedInstallerSha256.ToUpperInvariant()) $installerHash
     Assert-Matrix 'semantic matrix uses the frozen installed executable' ($applicationHash -eq $ExpectedApplicationSha256.ToUpperInvariant()) $applicationHash

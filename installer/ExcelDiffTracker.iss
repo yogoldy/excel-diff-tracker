@@ -51,6 +51,11 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 [Files]
 Source: "..\artifacts\publish\win-arm64\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+[InstallDelete]
+; Retire only the explicitly listed runtime files owned by the prior release.
+; User workbooks, history, reports, settings, and uninstall metadata are excluded.
+#include "LegacyRuntimeFiles-0.1.1.iss"
+
 [Icons]
 Name: "{group}\Excel Diff Tracker"; Filename: "{app}\{#MyAppExeName}"
 Name: "{userdesktop}\Excel Diff Tracker"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon

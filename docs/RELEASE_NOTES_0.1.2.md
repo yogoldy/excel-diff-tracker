@@ -10,10 +10,12 @@ Open-workbook reliability and visual-accessibility update for Windows 11 ARM64.
 - Corrects light/dark text inheritance and themed ComboBox rendering that could produce light-on-light or dark-on-dark content.
 - Adds responsive scrolling, wrapping, and card layouts for onboarding and main pages at constrained window sizes and higher display scaling.
 - Adds stable Windows UI Automation identifiers throughout onboarding and the primary application views.
+- Gives repeated workbook/history actions distinct accessible identifiers, exposes complete truncated paths, and improves onboarding warning contrast.
 
 ## Release qualification
 
 - The source includes a fail-closed black-box acceptance contract and external UI Automation/SQLite evidence tools.
+- Application and acceptance-probe code are bundled into their hashed executables so loose runtime DLLs cannot escape candidate identity checks.
 - Publishing requires two clean installed-product runs, the required visual/scaling matrix, hashed evidence, and independent functional, visual, and release attestations for the exact installer SHA-256.
 - Final validation measurements and installer hash will be recorded after the frozen candidate completes that gate.
 

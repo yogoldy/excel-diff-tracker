@@ -78,6 +78,22 @@ Require-EvidenceFile $result.telemetry.monitorLog
 $telemetry = @(Get-Content $telemetryPath | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | ForEach-Object { $_ | ConvertFrom-Json })
 Require-Condition ($telemetry.Count -eq $result.telemetry.sampleCount) 'telemetry sample count differs from the raw JSONL'
 Require-Condition ($telemetry.Count -ge 2) 'raw telemetry must contain at least two samples'
+$rawTimestampGaps = for ($sampleIndex = 0; $sampleIndex -lt $telemetry.Count; $sampleIndex++) {
+    $sample = $telemetry[$sampleIndex]
+    Require-Condition ($sample.sample -eq $sampleIndex) "telemetry sample $sampleIndex is missing, duplicated, or out of order"
+    $sampleStartedUtc = [DateTime]::Parse([string]$sample.startedUtc).ToUniversalTime()
+    Require-Condition ($sampleStartedUtc -ge $resultStartedUtc -and $sampleStartedUtc -le $resultFinishedUtc) "telemetry sample $sampleIndex is outside the benchmark"
+    $timestampGap = 0.0
+    if ($sampleIndex -gt 0) {
+        $previousStartedUtc = [DateTime]::Parse([string]$telemetry[$sampleIndex - 1].startedUtc).ToUniversalTime()
+        $timestampGap = ($sampleStartedUtc - $previousStartedUtc).TotalMilliseconds
+        Require-Condition ($timestampGap -gt 0) "telemetry sample $sampleIndex timestamp is duplicated or out of order"
+        Require-Condition ($timestampGap -le $result.thresholds.maxHeartbeatGapMilliseconds) "telemetry sample $sampleIndex has an actual heartbeat gap over two seconds"
+    }
+    $roundedGap = [math]::Round($timestampGap, 3)
+    Require-Condition ($sample.gapMilliseconds -eq $roundedGap) "telemetry sample $sampleIndex recorded gap differs from its timestamps"
+    $roundedGap
+}
 Require-Condition ([DateTime]::Parse([string]$telemetry[0].startedUtc).ToUniversalTime() -ge $resultStartedUtc) 'telemetry starts before the benchmark'
 Require-Condition ([DateTime]::Parse([string]$telemetry[-1].startedUtc).ToUniversalTime() -le $resultFinishedUtc) 'telemetry finishes after the benchmark'
 $monitorStartedUtc = [DateTime]::Parse($result.telemetry.monitorStartedUtc).ToUniversalTime()
@@ -111,7 +127,7 @@ $rawTelemetryFailures = @($telemetry | Where-Object {
 })
 Require-Condition ($rawTelemetryFailures.Count -eq 0) 'raw telemetry contains an unresponsive, missing, stale-memory, slow-query, or heartbeat-gap sample'
 $rawMaxUiaDuration = ($telemetry | Measure-Object durationMilliseconds -Maximum).Maximum
-$rawMaxGap = ($telemetry | Select-Object -Skip 1 | Measure-Object gapMilliseconds -Maximum).Maximum
+$rawMaxGap = ($rawTimestampGaps | Select-Object -Skip 1 | Measure-Object -Maximum).Maximum
 $rawPeakPrivateBytes = ($telemetry | Measure-Object privateBytes -Maximum).Maximum
 $rawPeakPrivateWorkingSetBytes = ($telemetry | Measure-Object privateWorkingSetBytes -Maximum).Maximum
 $rawPeakWorkingSetBytes = ($telemetry | Measure-Object peakWorkingSetBytes -Maximum).Maximum

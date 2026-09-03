@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Welcome to Excel Diff Tracker" Width="710" Height="540" MinWidth="620" MinHeight="460" ResizeMode="CanResize"
         WindowStartupLocation="CenterScreen" ShowInTaskbar="True"
-        AutomationProperties.AutomationId="OnboardingWindow" AutomationProperties.Name="Excel Diff Tracker setup">
+        AutomationProperties.AutomationId="OnboardingWindow" AutomationProperties.Name="Welcome to Excel Diff Tracker">
     <Grid Margin="28">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
 

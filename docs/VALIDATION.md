@@ -1,5 +1,11 @@
 # Validation record
 
+## 0.1.2 release preflight (2026-09-03 UTC)
+
+The continued audit found defects in prior-release UI selectors, PowerShell nullable/missing-property handling, populated-page accessibility, warning contrast, recovery semantic checks, benchmark heartbeat coverage, soak completion evidence, and executable identity coverage. The corresponding source/harness corrections have isolated regression coverage. The candidate application and AcceptanceProbe now publish as single-file executables including native dependencies so their hashes cover the executable payload.
+
+This work was performed on the user's everyday Windows VM. Its installed application, workbooks, history, startup settings, and sign-in session were not used for acceptance. Installed lifecycle/upgrade/uninstall, two clean critical-path runs, real Excel semantic/recovery/benchmark/soak runs, the complete visual matrix, explicit human visual approval, aggregate evidence validation, and final independent attestations remain outstanding. Source tests and a compiled installer do not approve release 0.1.2. No release tag or public asset should be created from this preflight alone.
+
 Validation was performed on 2026-08-31 and finalized on 2026-09-01 in a Windows 11 ARM64 Parallels VM using .NET SDK 10.0.400 and runtime 10.0.11. The release candidate is a self-contained ARM64 application.
 
 ## Initial 0.1.0 checks

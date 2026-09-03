@@ -212,6 +212,8 @@ function Wait-UntilScheduledSave {
 try {
     $installerHash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToUpperInvariant()
     $applicationHash = (Get-FileHash $application -Algorithm SHA256).Hash.ToUpperInvariant()
+    $null = & (Join-Path $PSScriptRoot 'Test-SingleFilePayload.ps1') -ExecutablePath $application
+    $null = & (Join-Path $PSScriptRoot 'Test-SingleFilePayload.ps1') -ExecutablePath $probe
     Assert-Soak 'soak uses the frozen installer' ($installerHash -eq $ExpectedInstallerSha256.ToUpperInvariant()) $installerHash
     Assert-Soak 'soak uses the frozen installed executable' ($applicationHash -eq $ExpectedApplicationSha256.ToUpperInvariant()) $applicationHash
     Assert-Soak 'installed app database exists' (Test-Path $database -PathType Leaf) $database

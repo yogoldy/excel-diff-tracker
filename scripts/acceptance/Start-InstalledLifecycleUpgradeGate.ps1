@@ -193,6 +193,17 @@ function Get-InstallerProductVersion {
     ([System.Diagnostics.FileVersionInfo]::GetVersionInfo($Path)).ProductVersion
 }
 
+function Get-ProductStartupRegistration {
+    if (-not (Test-Path -LiteralPath $runKey -ErrorAction Stop)) {
+        return [pscustomobject]@{ exists=$false; value=$null }
+    }
+    $properties = Get-ItemProperty -LiteralPath $runKey -ErrorAction Stop
+    Assert-GateCondition ($null -ne $properties) 'The startup registry key could not be read.'
+    $property = $properties.PSObject.Properties['ExcelDiffTracker']
+    if ($null -eq $property) { return [pscustomobject]@{ exists=$false; value=$null } }
+    [pscustomobject]@{ exists=$true; value=$property.Value }
+}
+
 function Get-ProductUninstallEntry {
     $roots = @(
         'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
@@ -297,9 +308,39 @@ function Close-MainToTray {
     $null = Get-ProductTrayIcon
 }
 
+function Select-PriorUiaElement {
+    param(
+        [object[]] $Elements,
+        [int] $ProcessId,
+        [string] $Name,
+        [System.Windows.Automation.ControlType] $ControlType,
+        [switch] $Optional
+    )
+    $matching = @($Elements | Where-Object {
+        $_.Current.ProcessId -eq $ProcessId -and $_.Current.Name -ceq $Name -and
+        $_.Current.ControlType -eq $ControlType -and -not $_.Current.IsOffscreen
+    })
+    if ($Optional -and $matching.Count -eq 0) { return $null }
+    Assert-GateCondition ($matching.Count -eq 1) "Expected one visible prior-release $($ControlType.ProgrammaticName) named '$Name' in process $ProcessId; found $($matching.Count)."
+    $matching[0]
+}
+
+function Find-PriorUiaElement {
+    param(
+        [System.Windows.Automation.AutomationElement] $Root,
+        [int] $ProcessId,
+        [string] $Name,
+        [System.Windows.Automation.ControlType] $ControlType,
+        [switch] $Optional
+    )
+    Assert-GateCondition ($Root.Current.ProcessId -eq $ProcessId -and $Root.Current.ControlType -eq [System.Windows.Automation.ControlType]::Window) 'The prior-release selector must be scoped to the expected process window.'
+    $elements = $Root.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.Condition]::TrueCondition)
+    Select-PriorUiaElement -Elements @($elements) -ProcessId $ProcessId -Name $Name -ControlType $ControlType -Optional:$Optional
+}
+
 function Choose-WorkbookFromDialog {
-    param([string] $Path)
-    $dialog = Find-UiaWindow -Title 'Choose a workbook to track' -TimeoutSeconds 15
+    param([string] $Path,[int] $ProcessId)
+    $dialog = Find-UiaWindow -Title 'Choose a workbook to track' -ProcessId $ProcessId -TimeoutSeconds 15
     $fileName = Find-UiaElement -Root $dialog -AutomationId '1148' -Optional
     if (-not $fileName) { $fileName = Find-UiaElement -Root $dialog -Name 'File name:' }
     Set-UiaValue -Element $fileName -Value $Path
@@ -308,30 +349,34 @@ function Choose-WorkbookFromDialog {
     Invoke-UiaElement -Element $open
 }
 
-function Complete-Onboarding {
+function Complete-PriorOnboarding {
     param([System.Diagnostics.Process] $Process,[string] $Workbook)
+    Assert-GateCondition ($PriorVersion -eq '0.1.1') 'The prior-release UI adapter requires the pinned 0.1.1 release.'
     $window = Find-UiaWindow -Title 'Welcome to Excel Diff Tracker' -ProcessId $Process.Id -TimeoutSeconds 20
+    $scope = @{ Root=$window; ProcessId=$Process.Id }
     $null = Save-UiEvidence -Name 'prior-onboarding-step-1' -Root $window
-    Invoke-UiaElement -Element (Find-UiaElement -Root $window -AutomationId 'OnboardingNextButton')
+    Invoke-UiaElement -Element (Find-PriorUiaElement @scope -Name 'Continue' -ControlType ([System.Windows.Automation.ControlType]::Button))
     Start-Sleep -Milliseconds 250
-    Invoke-UiaElement -Element (Find-UiaElement -Root $window -AutomationId 'OnboardingNextButton')
+    $null = Find-PriorUiaElement @scope -Name 'Choose a report folder' -ControlType ([System.Windows.Automation.ControlType]::Text)
+    Invoke-UiaElement -Element (Find-PriorUiaElement @scope -Name 'Continue' -ControlType ([System.Windows.Automation.ControlType]::Button))
     Start-Sleep -Milliseconds 250
-    Invoke-UiaElement -Element (Find-UiaElement -Root $window -AutomationId 'ChooseWorkbookButton')
-    Choose-WorkbookFromDialog -Path $Workbook
+    $null = Find-PriorUiaElement @scope -Name 'Add your first workbook' -ControlType ([System.Windows.Automation.ControlType]::Text)
+    Invoke-UiaElement -Element (Find-PriorUiaElement @scope -Name ('Choose workbook' + [char]0x2026) -ControlType ([System.Windows.Automation.ControlType]::Button))
+    Choose-WorkbookFromDialog -Path $Workbook -ProcessId $Process.Id
     Start-Sleep -Milliseconds 400
-    Assert-GateCondition ($null -ne (Find-UiaElement -Root $window -Name $Workbook -Optional)) 'The real workbook path was not present on onboarding step 3.'
-    Invoke-UiaElement -Element (Find-UiaElement -Root $window -AutomationId 'OnboardingNextButton')
+    $null = Find-PriorUiaElement @scope -Name $Workbook -ControlType ([System.Windows.Automation.ControlType]::Text)
+    Invoke-UiaElement -Element (Find-PriorUiaElement @scope -Name 'Continue' -ControlType ([System.Windows.Automation.ControlType]::Button))
     Start-Sleep -Milliseconds 250
-    foreach ($id in @('OnboardingStartWithWindowsCheckBox','OnboardingBeginTrackingCheckBox')) {
-        $element = Find-UiaElement -Root $window -AutomationId $id
+    foreach ($name in @('Start Excel Diff Tracker with Windows','Begin tracking the selected workbook')) {
+        $element = Find-PriorUiaElement @scope -Name $name -ControlType ([System.Windows.Automation.ControlType]::CheckBox)
         $toggle = $null
-        Assert-GateCondition ($element.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern,[ref]$toggle)) "$id does not expose TogglePattern."
-        Assert-GateCondition (([System.Windows.Automation.TogglePattern]$toggle).Current.ToggleState -eq [System.Windows.Automation.ToggleState]::On) "$id was not enabled."
+        Assert-GateCondition ($element.TryGetCurrentPattern([System.Windows.Automation.TogglePattern]::Pattern,[ref]$toggle)) "$name does not expose TogglePattern."
+        Assert-GateCondition (([System.Windows.Automation.TogglePattern]$toggle).Current.ToggleState -eq [System.Windows.Automation.ToggleState]::On) "$name was not enabled."
     }
-    Invoke-UiaElement -Element (Find-UiaElement -Root $window -AutomationId 'OnboardingNextButton')
-    Wait-AcceptanceCondition -TimeoutSeconds 60 -FailureMessage 'Onboarding did not create the real-workbook baseline.' -Condition { $null -ne (Find-UiaElement -Root $window -AutomationId 'OnboardingCompleteHeading' -Optional) }
+    Invoke-UiaElement -Element (Find-PriorUiaElement @scope -Name 'Activate tracking' -ControlType ([System.Windows.Automation.ControlType]::Button))
+    Wait-AcceptanceCondition -TimeoutSeconds 60 -FailureMessage 'Onboarding did not create the real-workbook baseline.' -Condition { $null -ne (Find-PriorUiaElement @scope -Name 'Tracking is active' -ControlType ([System.Windows.Automation.ControlType]::Text) -Optional) }
     $null = Save-UiEvidence -Name 'prior-onboarding-complete' -Root $window
-    Invoke-UiaElement -Element (Find-UiaElement -Root $window -AutomationId 'OnboardingNextButton')
+    Invoke-UiaElement -Element (Find-PriorUiaElement @scope -Name 'Open dashboard' -ControlType ([System.Windows.Automation.ControlType]::Button))
     Find-UiaWindow -Title 'Excel Diff Tracker' -ProcessId $Process.Id -TimeoutSeconds 20
 }
 
@@ -412,10 +457,18 @@ function Save-VisibleExcelKeyboardValue {
 }
 
 function Assert-DashboardState {
-    param([System.Windows.Automation.AutomationElement] $Window,[long] $ExpectedSequence)
-    Invoke-UiaElement -Element (Find-UiaElement -Root $Window -AutomationId 'DashboardNavigationButton')
+    param([System.Windows.Automation.AutomationElement] $Window,[long] $ExpectedSequence,[switch] $PriorRelease)
+    if ($PriorRelease) {
+        Invoke-UiaElement -Element (Find-PriorUiaElement -Root $Window -ProcessId $Window.Current.ProcessId -Name ([string][char]0x2302 + '  Dashboard') -ControlType ([System.Windows.Automation.ControlType]::Button))
+    } else {
+        Invoke-UiaElement -Element (Find-UiaElement -Root $Window -AutomationId 'DashboardNavigationButton')
+    }
     Start-Sleep -Milliseconds 300
-    $pathElement = Find-UiaElement -Root $Window -Name $workbookPath
+    $pathElement = if ($PriorRelease) {
+        Find-PriorUiaElement -Root $Window -ProcessId $Window.Current.ProcessId -Name $workbookPath -ControlType ([System.Windows.Automation.ControlType]::Text)
+    } else {
+        Find-UiaElement -Root $Window -Name $workbookPath
+    }
     $walker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
     $ancestor = $pathElement
     $proved = $false
@@ -442,14 +495,15 @@ try {
     Assert-GateCondition (-not (Test-Path $startMenuShortcut)) "Clean gate failed: Start-menu shortcut exists: $startMenuShortcut"
     Assert-GateCondition (-not (Test-Path $desktopShortcut)) "Clean gate failed: desktop shortcut exists: $desktopShortcut"
     Assert-GateCondition (@(Get-Process -Name ExcelDiffTracker -ErrorAction SilentlyContinue).Count -eq 0) 'Clean gate failed: Excel Diff Tracker is running.'
-    $existingStartup = (Get-ItemProperty -Path $runKey -Name ExcelDiffTracker -ErrorAction SilentlyContinue).ExcelDiffTracker
-    Assert-GateCondition ([string]::IsNullOrWhiteSpace([string]$existingStartup)) 'Clean gate failed: startup registry value exists.'
+    $existingStartup = Get-ProductStartupRegistration
+    Assert-GateCondition (-not $existingStartup.exists) 'Clean gate failed: startup registry value exists.'
     Assert-GateCondition (Test-NoProductUninstallEntry) 'Clean gate failed: an Excel Diff Tracker uninstall entry exists.'
     $checks.cleanNoInstallNoDataState = $true
 
     $priorInstallerHash = Get-Hash $priorInstaller
     $candidateInstallerHash = Get-Hash $candidateInstaller
     $probeHash = Get-Hash $probe
+    $null = & (Join-Path $PSScriptRoot 'Test-SingleFilePayload.ps1') -ExecutablePath $probe
     Assert-GateCondition ($priorInstallerHash -eq $ExpectedPriorInstallerSha256.ToUpperInvariant()) 'Prior public installer hash differs from the frozen value.'
     Assert-GateCondition ($candidateInstallerHash -eq $ExpectedCandidateInstallerSha256.ToUpperInvariant()) 'Candidate installer hash differs from the frozen value.'
     Assert-GateCondition ($probeHash -eq $ExpectedProbeSha256.ToUpperInvariant()) 'AcceptanceProbe hash differs from the frozen value.'
@@ -481,12 +535,12 @@ try {
 
     $applicationProcess = Start-FromShortcut
     $checks.priorStartMenuLaunchUsed = $true
-    $priorMain = Complete-Onboarding -Process $applicationProcess -Workbook $workbookPath
+    $priorMain = Complete-PriorOnboarding -Process $applicationProcess -Workbook $workbookPath
     $checks.priorOnboardingCompletedWithRealXlsx = $true
     $priorBaselineProbe = Invoke-ProbeUntilPassed -Name 'prior-baseline' -Arguments @(
         '--database',$database,'--workbook',$workbookPath,'--expected-sequence','0','--expected-version-count','0',
         '--expected-error-count','0','--require-active','--require-no-last-error','--require-unique-version-hashes','--require-source-hash-match') -TimeoutSeconds 60
-    Assert-DashboardState -Window $priorMain -ExpectedSequence 0
+    Assert-DashboardState -Window $priorMain -ExpectedSequence 0 -PriorRelease
     $null = Save-UiEvidence -Name 'prior-dashboard-baseline' -Root $priorMain
 
     $preValue = 'EDT-UPGRADE-PRE-' + $phaseLinkNonce.Substring(0,8).ToUpperInvariant()
@@ -520,6 +574,7 @@ try {
     Assert-GateCondition ($postInstallDatabaseRecord.sha256 -eq $preDatabaseRecord.sha256 -and $postInstallDatabaseRecord.bytes -eq $preDatabaseRecord.bytes) 'The candidate installer changed the closed history database during upgrade.'
     $checks.candidateInstalledOverPriorWithoutUninstall = $true
     $candidateApplicationHash = Get-Hash $application
+    $null = & (Join-Path $PSScriptRoot 'Test-SingleFilePayload.ps1') -ExecutablePath $application
     Assert-GateCondition ($candidateApplicationHash -eq $ExpectedCandidateApplicationSha256.ToUpperInvariant()) 'Installed candidate executable hash differs from the frozen candidate payload.'
     Copy-Item -LiteralPath $application -Destination (Join-Path $binaryDirectory 'candidate-ExcelDiffTracker.exe')
     $candidateApplicationRecord = Get-FileRecord (Join-Path $binaryDirectory 'candidate-ExcelDiffTracker.exe')
@@ -550,7 +605,9 @@ try {
     $null = Save-UiEvidence -Name 'candidate-dashboard-sequence-2' -Root $candidateMain
     $checks.candidateVisibleExcelKeyboardSaveExact = $true
 
-    $startupValue = (Get-ItemProperty -Path $runKey -Name ExcelDiffTracker -ErrorAction Stop).ExcelDiffTracker
+    $startupRegistration = Get-ProductStartupRegistration
+    Assert-GateCondition $startupRegistration.exists 'The candidate startup registry value is missing.'
+    $startupValue = $startupRegistration.value
     $expectedStartupValue = '"' + $application + '" --background'
     Assert-GateCondition ([string]::Equals([string]$startupValue,$expectedStartupValue,[StringComparison]::Ordinal)) "Startup registration is not exact. Expected '$expectedStartupValue', found '$startupValue'."
     $checks.startupRegistrationExact = $true

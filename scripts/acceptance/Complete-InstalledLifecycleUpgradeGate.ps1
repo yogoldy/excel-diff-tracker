@@ -100,6 +100,17 @@ function Get-Hash {
     (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToUpperInvariant()
 }
 
+function Get-ProductStartupRegistration {
+    if (-not (Test-Path -LiteralPath $runKey -ErrorAction Stop)) {
+        return [pscustomobject]@{ exists=$false; value=$null }
+    }
+    $properties = Get-ItemProperty -LiteralPath $runKey -ErrorAction Stop
+    Assert-GateCondition ($null -ne $properties) 'The startup registry key could not be read.'
+    $property = $properties.PSObject.Properties['ExcelDiffTracker']
+    if ($null -eq $property) { return [pscustomobject]@{ exists=$false; value=$null } }
+    [pscustomobject]@{ exists=$true; value=$property.Value }
+}
+
 function Write-ActionLog {
     param([string] $Message)
     $line = '{0}|{1}' -f [DateTime]::UtcNow.ToString('O'),$Message
@@ -309,6 +320,7 @@ try {
     $priorInstallerHash = Get-Hash $priorInstaller
     $candidateInstallerHash = Get-Hash $candidateInstaller
     $probeHash = Get-Hash $probe
+    $null = & (Join-Path $PSScriptRoot 'Test-SingleFilePayload.ps1') -ExecutablePath $probe
     Assert-GateCondition ($priorInstallerHash -eq $ExpectedPriorInstallerSha256.ToUpperInvariant() -and $priorInstallerHash -eq $pending.priorInstallerSha256 -and $priorInstallerHash -eq $pre.prior.installerSha256) 'Prior installer identity differs across phases.'
     Assert-GateCondition ($candidateInstallerHash -eq $ExpectedCandidateInstallerSha256.ToUpperInvariant() -and $candidateInstallerHash -eq $pending.candidateInstallerSha256 -and $candidateInstallerHash -eq $pre.candidate.installerSha256) 'Candidate installer identity differs across phases.'
     Assert-GateCondition ($probeHash -eq $ExpectedProbeSha256.ToUpperInvariant() -and $probeHash -eq $pending.probeSha256 -and $probeHash -eq $pre.probe.sha256) 'AcceptanceProbe identity differs across phases.'
@@ -335,6 +347,7 @@ try {
     Assert-GateCondition ($processStartedUtc -gt $preCompleted -and $processStartedUtc -ge $postExplorerStarted) 'The candidate process was not started by the new interactive logon startup interval.'
     $checks.candidateAutoStartedInNewLogon = $true
     $autoStartedHash = Get-Hash $application
+    $null = & (Join-Path $PSScriptRoot 'Test-SingleFilePayload.ps1') -ExecutablePath $application
     Assert-GateCondition ($autoStartedHash -eq $ExpectedCandidateApplicationSha256.ToUpperInvariant()) 'The auto-started executable hash differs from the frozen candidate.'
     $checks.autoStartedExecutableHashExact = $true
 
@@ -391,8 +404,8 @@ try {
     $checks.installedBinariesRemoved = $true
     Assert-GateCondition (-not (Test-Path $startMenuShortcut)) 'The Start-menu shortcut remained after uninstall.'
     $checks.startMenuShortcutRemoved = $true
-    $remainingStartup = (Get-ItemProperty -Path $runKey -Name ExcelDiffTracker -ErrorAction SilentlyContinue).ExcelDiffTracker
-    Assert-GateCondition ([string]::IsNullOrWhiteSpace([string]$remainingStartup)) 'The startup registry entry remained after uninstall.'
+    $remainingStartup = Get-ProductStartupRegistration
+    Assert-GateCondition (-not $remainingStartup.exists) 'The startup registry entry remained after uninstall.'
     $checks.startupEntryRemoved = $true
     Assert-GateCondition (@(Get-ProductUninstallEntries).Count -eq 0) 'The product uninstall registration remained after uninstall.'
     $checks.uninstallRegistrationRemoved = $true
@@ -429,7 +442,7 @@ try {
         identities=[ordered]@{ priorVersion=$PriorVersion; candidateVersion=$CandidateVersion; priorInstallerSha256=$priorInstallerHash; candidateInstallerSha256=$candidateInstallerHash; priorApplicationSha256=$ExpectedPriorApplicationSha256.ToUpperInvariant(); candidateApplicationSha256=$autoStartedHash; probeSha256=$probeHash }
         autoStart=[ordered]@{ processId=$applicationProcess.Id; processStartedUtc=$processStartedUtc.ToString('O'); executablePath=$application; executableSha256=$autoStartedHash; welcomeWindowCount=0; mainWindowCountBeforeTrayOpen=0; trayIconName=$trayIconName; trayIconAutomationId=$trayIconAutomationId }
         exactState=[ordered]@{ workbookPath=$workbookPath; address=$address; priorValue=$priorValue; candidateValue=$candidateValue; expectedSequence=2; postLogonProbe=$postLogonProbe; postUninstallProbe=$postUninstallProbe }
-        uninstall=[ordered]@{ uninstaller=$uninstallerRecord; startedUtc=$uninstallStartedUtc.ToString('O'); completedUtc=$uninstallCompletedUtc.ToString('O'); exitCode=$uninstall.ExitCode; installDirectoryRemoved=(-not (Test-Path $installDirectory)); startMenuShortcutRemoved=(-not (Test-Path $startMenuShortcut)); startupEntryRemoved=[string]::IsNullOrWhiteSpace([string]$remainingStartup); uninstallRegistrationCount=@(Get-ProductUninstallEntries).Count; dataDirectoryRetained=(Test-Path $dataDirectory); databaseRetained=(Test-Path $database); databaseSha256Before=$beforeUninstallDatabaseHash; databaseSha256After=$afterUninstallDatabaseHash; databaseBytesBefore=[long]$beforeUninstallDatabaseBytes; databaseBytesAfter=[long]$afterUninstallDatabaseBytes; databaseEvidenceBefore=$beforeUninstallDatabaseRecords; databaseEvidenceAfter=$afterUninstallDatabaseRecords }
+        uninstall=[ordered]@{ uninstaller=$uninstallerRecord; startedUtc=$uninstallStartedUtc.ToString('O'); completedUtc=$uninstallCompletedUtc.ToString('O'); exitCode=$uninstall.ExitCode; installDirectoryRemoved=(-not (Test-Path $installDirectory)); startMenuShortcutRemoved=(-not (Test-Path $startMenuShortcut)); startupEntryRemoved=(-not $remainingStartup.exists); uninstallRegistrationCount=@(Get-ProductUninstallEntries).Count; dataDirectoryRetained=(Test-Path $dataDirectory); databaseRetained=(Test-Path $database); databaseSha256Before=$beforeUninstallDatabaseHash; databaseSha256After=$afterUninstallDatabaseHash; databaseBytesBefore=[long]$beforeUninstallDatabaseBytes; databaseBytesAfter=[long]$afterUninstallDatabaseBytes; databaseEvidenceBefore=$beforeUninstallDatabaseRecords; databaseEvidenceAfter=$afterUninstallDatabaseRecords }
         uiEvidence=@($uiRecords)
         actionLog=Get-FileRecord $actionLogPath
         checks=$checks

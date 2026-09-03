@@ -384,7 +384,7 @@ function Test-AccessibleTextPresent {
     param([System.Windows.Automation.AutomationElement] $RootElement, [string] $Text, [int] $RequiredProcessId = 0)
     if ([string]::IsNullOrWhiteSpace($Text)) { return $false }
     foreach ($element in $RootElement.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.Condition]::TrueCondition)) {
-        if (($RequiredProcessId -eq 0 -or $element.Current.ProcessId -eq $RequiredProcessId) -and ($element.Current.Name -eq $Text -or $element.Current.Name.IndexOf($Text,[StringComparison]::OrdinalIgnoreCase) -ge 0)) { return $true }
+        if (-not $element.Current.IsOffscreen -and ($RequiredProcessId -eq 0 -or $element.Current.ProcessId -eq $RequiredProcessId) -and ($element.Current.Name -eq $Text -or $element.Current.Name.IndexOf($Text,[StringComparison]::OrdinalIgnoreCase) -ge 0)) { return $true }
     }
     $false
 }
@@ -393,7 +393,7 @@ function Test-AccessibleTextAndHelpPresent {
     param([System.Windows.Automation.AutomationElement] $RootElement, [string] $Text, [int] $RequiredProcessId = 0)
     if ([string]::IsNullOrWhiteSpace($Text)) { return $false }
     foreach ($element in $RootElement.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.Condition]::TrueCondition)) {
-        if (($RequiredProcessId -eq 0 -or $element.Current.ProcessId -eq $RequiredProcessId) -and
+        if (-not $element.Current.IsOffscreen -and ($RequiredProcessId -eq 0 -or $element.Current.ProcessId -eq $RequiredProcessId) -and
             ($element.Current.Name -eq $Text -or $element.Current.Name.IndexOf($Text,[StringComparison]::OrdinalIgnoreCase) -ge 0) -and
             -not [string]::IsNullOrWhiteSpace($element.Current.HelpText) -and
             $element.Current.HelpText.IndexOf($Text,[StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
@@ -415,6 +415,7 @@ function Assert-SelectedTheme {
 }
 
 $product = Get-ProductProcess
+$null = & (Join-Path $PSScriptRoot 'Test-SingleFilePayload.ps1') -ExecutablePath $product.Path
 $initialTitle = if ($CapturePhase -eq 'Onboarding') { 'Welcome to Excel Diff Tracker' } else { 'Excel Diff Tracker' }
 $referenceWindow = Find-UiaWindow -Title $initialTitle -ProcessId $product.Id -TimeoutSeconds 20
 $environment = Get-ActualEnvironment -ReferenceWindow $referenceWindow

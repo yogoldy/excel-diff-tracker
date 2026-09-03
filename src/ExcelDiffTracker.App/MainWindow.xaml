@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:ExcelDiffTracker.App"
         Title="Excel Diff Tracker" Width="1060" Height="720" MinWidth="760" MinHeight="520"
-        AutomationProperties.AutomationId="MainWindow" AutomationProperties.Name="Excel Diff Tracker main window"
+        AutomationProperties.AutomationId="MainWindow" AutomationProperties.Name="Excel Diff Tracker"
         WindowStartupLocation="CenterScreen" Closing="OnClosing">
     <Window.Resources>
         <local:StringEqualsToVisibilityConverter x:Key="PageVisibility" />
@@ -72,7 +72,7 @@
                         <Button Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource PrimaryButton}" Command="{Binding AddWorkbookCommand}" Content="＋ Add workbook" AutomationProperties.AutomationId="DashboardAddWorkbookButton" AutomationProperties.Name="Add workbook" />
                     </Grid>
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                        <ItemsControl ItemsSource="{Binding Workbooks}">
+                        <ItemsControl x:Name="DashboardWorkbooks" ItemsSource="{Binding Workbooks}">
                             <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -80,7 +80,7 @@
                                         <Grid>
                                             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                                             <DockPanel>
-                                                <TextBlock FontWeight="SemiBold" FontSize="16" Text="{Binding Path}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}" MaxWidth="205" />
+                                                <TextBlock FontWeight="SemiBold" FontSize="16" Text="{Binding Path}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}" AutomationProperties.HelpText="{Binding Path}" MaxWidth="205" />
                                                 <Border DockPanel.Dock="Right" Background="{DynamicResource AccentSoftBrush}" CornerRadius="9" Padding="7,3">
                                                     <StackPanel Orientation="Horizontal">
                                                         <Ellipse Width="7" Height="7" Margin="0,0,5,0" Fill="{Binding Status, Converter={StaticResource StatusBrush}}" />
@@ -94,7 +94,7 @@
                                                 <StackPanel><TextBlock Style="{StaticResource MutedText}" Text="VERSIONS" FontSize="10"/><TextBlock FontSize="20" FontWeight="SemiBold" Text="{Binding CurrentSequence}" /></StackPanel>
                                                 <StackPanel Grid.Column="1"><TextBlock Style="{StaticResource MutedText}" Text="LAST CAPTURE" FontSize="10"/><TextBlock Text="{Binding LastSuccessfulCaptureUtc, Converter={StaticResource UtcToLocal}}" TextTrimming="CharacterEllipsis" /></StackPanel>
                                             </Grid>
-                                            <Button Grid.Row="3" HorizontalAlignment="Left" Style="{StaticResource SecondaryButton}" Command="{Binding DataContext.ToggleTrackingCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="{Binding IsEnabled, Converter={StaticResource TrackingAction}}" />
+                                            <Button Grid.Row="3" HorizontalAlignment="Left" Style="{StaticResource SecondaryButton}" Command="{Binding DataContext.ToggleTrackingCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="{Binding IsEnabled, Converter={StaticResource TrackingAction}}" AutomationProperties.AutomationId="{Binding Id, StringFormat=DashboardToggleTracking_{0}}" />
                                         </Grid>
                                     </Border>
                                 </DataTemplate>
@@ -110,26 +110,27 @@
                         <StackPanel Margin="0,0,16,0"><TextBlock Style="{StaticResource PageTitle}" Text="Workbooks" AutomationProperties.AutomationId="WorkbooksHeading"/><TextBlock Style="{StaticResource MutedText}" Text="Pause tracking without deleting history, or permanently purge it separately."/></StackPanel>
                         <Button Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource PrimaryButton}" Command="{Binding AddWorkbookCommand}" Content="＋ Add workbook" AutomationProperties.AutomationId="WorkbooksAddWorkbookButton" AutomationProperties.Name="Add workbook" />
                     </Grid>
-                    <ListBox Grid.Row="1" ItemsSource="{Binding Workbooks}" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                        <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="Margin" Value="0,0,0,10"/><Setter Property="Focusable" Value="False"/></Style></ListBox.ItemContainerStyle>
-                        <ListBox.ItemTemplate><DataTemplate>
-                            <Border Style="{StaticResource Card}">
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl x:Name="WorkbookRows" ItemsSource="{Binding Workbooks}">
+                        <ItemsControl.ItemTemplate><DataTemplate>
+                            <Border Style="{StaticResource Card}" Margin="0,0,0,10">
                                 <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                                     <StackPanel>
-                                        <TextBlock FontWeight="SemiBold" FontSize="16" Text="{Binding Path}" TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Margin="0,5,0,0" Style="{StaticResource MutedText}" Text="{Binding ReportDirectory, StringFormat=Reports: {0}}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock FontWeight="SemiBold" FontSize="16" Text="{Binding Path}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Path}" AutomationProperties.HelpText="{Binding Path}" />
+                                        <TextBlock Margin="0,5,0,0" Style="{StaticResource MutedText}" Text="{Binding ReportDirectory, StringFormat=Reports: {0}}" TextTrimming="CharacterEllipsis" ToolTip="{Binding ReportDirectory}" AutomationProperties.HelpText="{Binding ReportDirectory}" />
                                         <TextBlock Margin="0,5,0,0" Style="{StaticResource MutedText}" Text="{Binding LastSummary}" />
                                         <TextBlock Margin="0,5,0,0" Foreground="{DynamicResource ErrorBrush}" Text="{Binding LastError}" />
                                     </StackPanel>
                                     <WrapPanel Grid.Row="1" Margin="0,14,0,0" VerticalAlignment="Center">
-                                        <Button Margin="0,0,8,0" Style="{StaticResource SecondaryButton}" Command="{Binding DataContext.ToggleTrackingCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="{Binding IsEnabled, Converter={StaticResource TrackingAction}}" />
-                                        <Button Margin="0,0,8,0" Style="{StaticResource SecondaryButton}" Command="{Binding DataContext.ChangeWorkbookReportFolderCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="Report folder…" />
-                                        <Button Background="Transparent" Foreground="{DynamicResource ErrorBrush}" BorderBrush="{DynamicResource BorderBrush}" Padding="12,8" Command="{Binding DataContext.PurgeCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="Purge…" />
+                                        <Button Margin="0,0,8,0" Style="{StaticResource SecondaryButton}" Command="{Binding DataContext.ToggleTrackingCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="{Binding IsEnabled, Converter={StaticResource TrackingAction}}" AutomationProperties.AutomationId="{Binding Id, StringFormat=WorkbookToggleTracking_{0}}" />
+                                        <Button Margin="0,0,8,0" Style="{StaticResource SecondaryButton}" Command="{Binding DataContext.ChangeWorkbookReportFolderCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="Report folder…" AutomationProperties.AutomationId="{Binding Id, StringFormat=WorkbookReportFolder_{0}}" />
+                                        <Button Background="Transparent" Foreground="{DynamicResource ErrorBrush}" BorderBrush="{DynamicResource BorderBrush}" Padding="12,8" Command="{Binding DataContext.PurgeCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="Purge…" AutomationProperties.AutomationId="{Binding Id, StringFormat=WorkbookPurge_{0}}" />
                                     </WrapPanel>
                                 </Grid>
                             </Border>
-                        </DataTemplate></ListBox.ItemTemplate>
-                    </ListBox>
+                        </DataTemplate></ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    </ScrollViewer>
                 </Grid>
 
                 <Grid Visibility="{Binding CurrentPage, Converter={StaticResource PageVisibility}, ConverterParameter=History}" AutomationProperties.AutomationId="HistoryPage">
@@ -144,7 +145,7 @@
                     </Border>
                     <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
                         <StackPanel>
-                            <ItemsControl ItemsSource="{Binding VersionsView}">
+                            <ItemsControl x:Name="HistoryVersions" ItemsSource="{Binding VersionsView}">
                                 <ItemsControl.ItemTemplate><DataTemplate>
                                     <Border Style="{StaticResource Card}" Margin="0,0,0,10">
                                         <Grid>
@@ -152,13 +153,13 @@
                                             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                                             <Border Width="38" Height="38" CornerRadius="19" Background="{DynamicResource AccentSoftBrush}"><TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{DynamicResource AccentBrush}" FontWeight="Bold" Text="↺"/></Border>
                                             <StackPanel Grid.Column="1" Margin="14,0">
-                                                <TextBlock FontWeight="SemiBold" Text="{Binding WorkbookPath}" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock FontWeight="SemiBold" Text="{Binding WorkbookPath}" TextTrimming="CharacterEllipsis" ToolTip="{Binding WorkbookPath}" AutomationProperties.HelpText="{Binding WorkbookPath}" />
                                                 <TextBlock Margin="0,3,0,0" Style="{StaticResource MutedText}" Text="{Binding Summary}" />
-                                                <TextBlock Margin="0,3,0,0" Style="{StaticResource MutedText}"><Run Text="Version "/><Run Text="{Binding Sequence}"/><Run Text="  •  "/><Run Text="{Binding CapturedUtc, Converter={StaticResource UtcToLocal}}"/></TextBlock>
+                                                <TextBlock Margin="0,3,0,0" Style="{StaticResource MutedText}"><Run Text="Version "/><Run Text="{Binding Sequence, Mode=OneWay}"/><Run Text="  •  "/><Run Text="{Binding CapturedUtc, Mode=OneWay, Converter={StaticResource UtcToLocal}}"/></TextBlock>
                                             </StackPanel>
                                             <WrapPanel Grid.Row="1" Grid.Column="1" Margin="14,12,0,0" VerticalAlignment="Center">
-                                                <Button Margin="0,0,8,0" Style="{StaticResource SecondaryButton}" Command="{Binding DataContext.OpenReportCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="Open"/>
-                                                <Button Style="{StaticResource SecondaryButton}" Command="{Binding DataContext.ExportFullCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="Full export"/>
+                                                <Button Margin="0,0,8,0" Style="{StaticResource SecondaryButton}" Command="{Binding DataContext.OpenReportCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="Open" AutomationProperties.AutomationId="{Binding Id, StringFormat=HistoryOpenReport_{0}}"/>
+                                                <Button Style="{StaticResource SecondaryButton}" Command="{Binding DataContext.ExportFullCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Content="Full export" AutomationProperties.AutomationId="{Binding Id, StringFormat=HistoryFullExport_{0}}"/>
                                             </WrapPanel>
                                         </Grid>
                                     </Border>
@@ -168,7 +169,7 @@
                             <ItemsControl ItemsSource="{Binding ErrorsView}">
                                 <ItemsControl.ItemTemplate><DataTemplate>
                                     <Border Style="{StaticResource Card}" Margin="0,0,0,10" BorderBrush="{DynamicResource WarningBrush}">
-                                        <StackPanel><TextBlock Foreground="{DynamicResource WarningBrush}" FontWeight="SemiBold"><Run Text="⚠ "/><Run Text="{Binding Category}"/></TextBlock><TextBlock Margin="0,5,0,0" Text="{Binding Message}"/><TextBlock Margin="0,5,0,0" Style="{StaticResource MutedText}" Text="{Binding WorkbookPath}"/><TextBlock Style="{StaticResource MutedText}"><Run Text="Last seen "/><Run Text="{Binding LastSeenUtc, Converter={StaticResource UtcToLocal}}"/></TextBlock></StackPanel>
+                                        <StackPanel><TextBlock Foreground="{DynamicResource WarningBrush}" FontWeight="SemiBold"><Run Text="⚠ "/><Run Text="{Binding Category, Mode=OneWay}"/></TextBlock><TextBlock Margin="0,5,0,0" Text="{Binding Message}"/><TextBlock Margin="0,5,0,0" Style="{StaticResource MutedText}" Text="{Binding WorkbookPath}"/><TextBlock Style="{StaticResource MutedText}"><Run Text="Last seen "/><Run Text="{Binding LastSeenUtc, Mode=OneWay, Converter={StaticResource UtcToLocal}}"/></TextBlock></StackPanel>
                                     </Border>
                                 </DataTemplate></ItemsControl.ItemTemplate>
                             </ItemsControl>

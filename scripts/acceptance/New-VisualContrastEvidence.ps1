@@ -73,6 +73,7 @@ $contract = @(
     New-Check 'muted-on-hover' 'normal-text' 'MutedTextBrush' 'CardHoverBrush' 4.5
     New-Check 'primary-label' 'normal-text' 'PrimaryForegroundBrush' 'AccentBrush' 4.5
     New-Check 'warning-label' 'normal-text' 'WarningBrush' 'CardBrush' 4.5
+    New-Check 'warning-on-app' 'normal-text' 'WarningBrush' 'AppBackgroundBrush' 4.5
     New-Check 'error-label' 'normal-text' 'ErrorBrush' 'CardBrush' 4.5
     New-Check 'page-title' 'large-text' 'TextBrush' 'AppBackgroundBrush' 3.0
     New-Check 'section-title' 'large-text' 'TextBrush' 'CardBrush' 3.0

@@ -2,6 +2,7 @@ using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Windows;
 using System.Windows.Automation;
+using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Media;
@@ -44,6 +45,7 @@ public sealed class OnboardingWindowTests
                 Assert.True(double.IsNaN(Assert.IsType<Border>(window.FindName("WorkbookCard")).Width));
                 Assert.True(double.IsNaN(Assert.IsType<Border>(window.FindName("OptionsCard")).Width));
                 Assert.Equal("OnboardingWindow", AutomationProperties.GetAutomationId(window));
+                Assert.Equal(window.Title, new WindowAutomationPeer(window).GetName());
                 Assert.Equal("OnboardingNextButton", AutomationProperties.GetAutomationId(Assert.IsType<Button>(window.FindName("NextButton"))));
 
                 services.Value.Themes.Apply(AppTheme.Dark);
@@ -56,6 +58,10 @@ public sealed class OnboardingWindowTests
 
                 var mainWindow = new MainWindow(services.Value);
                 Assert.Equal("MainWindow", AutomationProperties.GetAutomationId(mainWindow));
+                Assert.Equal(mainWindow.Title, new WindowAutomationPeer(mainWindow).GetName());
+                AssertTemplateAutomation(mainWindow, "DashboardWorkbooks", 1);
+                AssertTemplateAutomation(mainWindow, "WorkbookRows", 3);
+                AssertTemplateAutomation(mainWindow, "HistoryVersions", 2);
                 Assert.Equal("SettingsNavigationButton", AutomationProperties.GetAutomationId(Assert.IsType<Button>(mainWindow.FindName("SettingsNavigationButton"))));
                 var themeComboBox = Assert.IsType<ComboBox>(mainWindow.FindName("ThemeComboBox"));
                 Assert.Equal("ThemeComboBox", AutomationProperties.GetAutomationId(themeComboBox));
@@ -96,6 +102,7 @@ public sealed class OnboardingWindowTests
         AssertContrast(palette, "PrimaryForegroundBrush", "AccentBrush");
         AssertContrast(palette, "AccentBrush", "AccentSoftBrush");
         AssertContrast(palette, "WarningBrush", "CardBrush");
+        AssertContrast(palette, "WarningBrush", "AppBackgroundBrush");
         AssertContrast(palette, "ErrorBrush", "CardBrush");
     }
 
@@ -112,6 +119,61 @@ public sealed class OnboardingWindowTests
         AssertContrast(palette, "AccentBrush", "SidebarBrush", 3);
         AssertContrast(palette, "AccentBrush", "AppBackgroundBrush", 3);
         AssertContrast(palette, "PrimaryForegroundBrush", "AccentBrush", 3);
+    }
+
+    private static void AssertTemplateAutomation(MainWindow window, string controlName, int actionCount)
+    {
+        var items = Assert.IsAssignableFrom<ItemsControl>(window.FindName(controlName));
+        var actionIds = new HashSet<string>();
+        for (var record = 1; record <= 2; record++)
+        {
+            var path = @"C:\Acceptance\deliberately long workbook paths\" + new string('x', 90) + record + ".xlsx";
+            var root = Assert.IsAssignableFrom<FrameworkElement>(items.ItemTemplate.LoadContent());
+            root.DataContext = new
+            {
+                Id = record,
+                Path = path,
+                WorkbookPath = path,
+                ReportDirectory = @"C:\Acceptance\reports",
+                IsEnabled = true,
+                Status = ExcelDiffTracker.Core.TrackingStatus.Active,
+                CurrentSequence = 1,
+                Sequence = 1,
+                LastSuccessfulCaptureUtc = DateTime.UtcNow,
+                CapturedUtc = DateTime.UtcNow,
+                LastSummary = "One cell changed",
+                Summary = "One cell changed",
+                LastError = (string?)null
+            };
+            root.Measure(new Size(760, 520));
+            root.Arrange(new Rect(0, 0, 760, 520));
+            root.UpdateLayout();
+            var elements = Descendants(root).ToArray();
+            var buttons = elements.OfType<Button>().ToArray();
+            Assert.Equal(actionCount, buttons.Length);
+            foreach (var button in buttons)
+            {
+                var peer = new ButtonAutomationPeer(button);
+                Assert.False(string.IsNullOrWhiteSpace(peer.GetAutomationId()));
+                Assert.True(actionIds.Add(peer.GetAutomationId()), "Repeated records must expose distinct action IDs.");
+                Assert.False(string.IsNullOrWhiteSpace(peer.GetName()));
+                Assert.True(button.Focusable);
+            }
+            var pathText = Assert.Single(elements.OfType<TextBlock>(), text => text.Text == path);
+            Assert.Equal(path, new TextBlockAutomationPeer(pathText).GetName());
+            Assert.Equal(path, new TextBlockAutomationPeer(pathText).GetHelpText());
+            Assert.Equal(path, pathText.ToolTip);
+        }
+    }
+
+    private static IEnumerable<DependencyObject> Descendants(DependencyObject root)
+    {
+        foreach (var child in LogicalTreeHelper.GetChildren(root).OfType<DependencyObject>())
+        {
+            yield return child;
+            foreach (var descendant in Descendants(child))
+                yield return descendant;
+        }
     }
 
     private static Color GetResourceColor(Application application, string key) =>

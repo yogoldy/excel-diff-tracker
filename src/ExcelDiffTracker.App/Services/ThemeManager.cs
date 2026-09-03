@@ -26,7 +26,7 @@ public sealed class ThemeManager : IDisposable
         ["AppBackgroundBrush"] = "#F6F4EF", ["SidebarBrush"] = "#ECE9E1", ["CardBrush"] = "#FFFEFB",
         ["CardHoverBrush"] = "#F3F7F4", ["TextBrush"] = "#24312D", ["MutedTextBrush"] = "#5E6965",
         ["BorderBrush"] = "#737E79", ["AccentBrush"] = "#236B5C", ["AccentSoftBrush"] = "#DDEDE7",
-        ["WarningBrush"] = "#A86413", ["ErrorBrush"] = "#B33A3A", ["PrimaryForegroundBrush"] = "#FFFFFF"
+        ["WarningBrush"] = "#9E5D10", ["ErrorBrush"] = "#B33A3A", ["PrimaryForegroundBrush"] = "#FFFFFF"
     };
 
     private AppTheme _selected = AppTheme.System;

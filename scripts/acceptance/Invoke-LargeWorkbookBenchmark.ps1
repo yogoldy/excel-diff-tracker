@@ -384,6 +384,8 @@ function Export-LatestVersionThroughUi {
 try {
     $installerHash = Get-AcceptanceFileSha256 -Path $installer
     $applicationHash = Get-AcceptanceFileSha256 -Path $application
+    $null = & (Join-Path $PSScriptRoot 'Test-SingleFilePayload.ps1') -ExecutablePath $application
+    $null = & (Join-Path $PSScriptRoot 'Test-SingleFilePayload.ps1') -ExecutablePath $probe
     Assert-Gate -Name 'benchmark uses the frozen installer' -Condition ($installerHash -eq $ExpectedInstallerSha256.ToUpperInvariant()) -EvidencePath '' -Detail $installerHash
     Assert-Gate -Name 'benchmark uses the frozen installed executable' -Condition ($applicationHash -eq $ExpectedApplicationSha256.ToUpperInvariant()) -EvidencePath '' -Detail $applicationHash
     Assert-Gate -Name 'installed app database exists' -Condition (Test-Path $database -PathType Leaf) -EvidencePath '' -Detail $database
