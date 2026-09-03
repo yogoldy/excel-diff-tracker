@@ -6,7 +6,7 @@
 - Version 0.2.0 is an unqualified local candidate. Its frozen build source is
   `845f20283182c5b529c74370918cef3419ca7631`.
 - The frozen installer SHA-256 is
-  `3562301F1EA6375A1726981A263E443BB794627755F1746304396D33167A2144`; the published application
+  `3562301F1EA6375A1726981A263E443BB794627755F1746304396D33167A2144`; the candidate application payload
   SHA-256 is `9244736A10ED36F38F4088A5DF6A6369DCC664417AE8D4FF62F3CD04C3A182CE`.
 - The source suite passed 30 tests, targeted minimum-size visual review passed, and two independent
   Sol-medium reviews accepted the local candidate within their stated scope.
