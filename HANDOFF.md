@@ -27,7 +27,10 @@
 
 The immediate task is a structured maintainer intake. Its accepted installer and usability findings
 should be repaired together in one stabilization pass. Product direction beyond the implemented
-comparison engine is provisional and is maintained in `docs/PRODUCT_ROADMAP.md`.
+comparison engine is provisional and is maintained in `docs/PRODUCT_ROADMAP.md`. The supporting
+`docs/product-strategy/` corpus preserves the product thesis, tiered scenario possibilities,
+read/operate/build trust boundary, market and competitor framing, GCBS relationship, and the
+2026-09-03 discovery synthesis without representing those ideas as implemented.
 
 ## Evidence boundary
 

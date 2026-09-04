@@ -4,6 +4,10 @@ This document owns future product direction for Excel Scenario Analysis Tool. It
 implemented foundation from planned workflows and hypotheses. Current maturity belongs in
 [Project status](PROJECT_STATUS.md); implemented internals belong in [Architecture](ARCHITECTURE.md).
 
+The supporting [product strategy map](product-strategy/README.md) preserves the product thesis,
+layered possibilities, trust boundaries, market research, and discovery-session reasoning behind
+this roadmap. Those notes do not establish implementation status.
+
 ## Product goal
 
 Turn a general Excel workbook into a reusable scenario-analysis instrument without requiring the

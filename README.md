@@ -8,6 +8,10 @@ Everything stays on your computer.
 
 Development status: 0.2.0 is an unqualified local candidate on the `excel-scenario-analysis-tool` branch and has been installed for a maintainer trial. It has not yet replaced 0.1.2 as the proven everyday-use baseline, and no 0.2.0 public release is authorized. See [Project status](docs/PROJECT_STATUS.md) for the current state, [Product roadmap](docs/PRODUCT_ROADMAP.md) for planned direction, and [Validation](docs/VALIDATION.md) for completed checks.
 
+The [product strategy map](docs/product-strategy/README.md) is the human entry point for the product
+thesis, layered scenario possibilities, trust boundary, market and competitor research, and the
+reasoning behind provisional future directions. It does not describe implemented 0.2.0 capability.
+
 ## What it tracks
 
 - Cell values added, changed, or cleared

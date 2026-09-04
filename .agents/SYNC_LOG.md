@@ -1,3 +1,4 @@
 # Reconciliation log
 
 - 2026-09-03 — Established the app-native operating schema; recorded the sanitized 0.2.0 maintainer-trial state, frozen build identity, safe legacy-cleanup failure, provisional product roadmap, and structured-intake next action. No application code, binaries, workbooks, reports, databases, or private test evidence were added.
+- 2026-09-03 — Preserved the sanitized scenario-product discovery as an Obsidian-ready strategy corpus with a human map, product thesis, layered product model, trust boundary, market and competitor framing, and session synthesis. Linked it from the README, roadmap, and handoff; kept the 0.2.0 maturity claims and structured-intake next action unchanged. No application code, binaries, workbooks, reports, databases, private values, or private test evidence were added.
