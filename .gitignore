@@ -2,6 +2,7 @@
 **/obj/
 .vs/
 .idea/
+.obsidian/
 *.user
 *.suo
 TestResults/
