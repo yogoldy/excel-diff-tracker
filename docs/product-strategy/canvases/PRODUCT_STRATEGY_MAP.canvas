@@ -1,0 +1,231 @@
+{
+  "nodes": [
+    {
+      "id": "strategy-title",
+      "type": "text",
+      "text": "# Excel Scenario Analysis Tool\n## Product strategy map\nA local-first layer that turns existing workbook logic into controlled, reusable decision evidence.",
+      "x": -200,
+      "y": -300,
+      "width": 820,
+      "height": 150,
+      "color": "5"
+    },
+    {
+      "id": "product-thesis",
+      "type": "file",
+      "file": "docs/product-strategy/PRODUCT_THESIS.md",
+      "x": -200,
+      "y": -80,
+      "width": 820,
+      "height": 260,
+      "color": "5"
+    },
+    {
+      "id": "product-layers",
+      "type": "file",
+      "file": "docs/product-strategy/PRODUCT_LAYERS.md",
+      "x": -800,
+      "y": 360,
+      "width": 420,
+      "height": 280,
+      "color": "4"
+    },
+    {
+      "id": "market-competition",
+      "type": "file",
+      "file": "docs/product-strategy/MARKET_AND_COMPETITION.md",
+      "x": 0,
+      "y": 360,
+      "width": 420,
+      "height": 280,
+      "color": "3"
+    },
+    {
+      "id": "trust-boundary",
+      "type": "file",
+      "file": "docs/product-strategy/TRUST_AND_EXECUTION_BOUNDARY.md",
+      "x": 800,
+      "y": 360,
+      "width": 420,
+      "height": 280,
+      "color": "2"
+    },
+    {
+      "id": "utility-wedge",
+      "type": "text",
+      "text": "# Simple utility wedge\n**Hypothesis**\n\nA low-friction multi-sheet scenario manager:\n- select inputs and outputs anywhere in a workbook;\n- save named scenarios;\n- compare results;\n- restore the baseline;\n- export the result.\n\nNo AI, server hosting, or workbook surgery is required.",
+      "x": -800,
+      "y": 800,
+      "width": 420,
+      "height": 330,
+      "color": "4"
+    },
+    {
+      "id": "assurance-product",
+      "type": "text",
+      "text": "# Corporate assurance\n**Later product layer**\n\nAnalyst-certified scenario contracts add:\n- controlled inputs and validations;\n- provenance and evidence status;\n- reconciliation and leakage controls;\n- approvals and shared libraries;\n- leadership and audit views.\n\nManagement operates a scenario the analyst has already configured.",
+      "x": 0,
+      "y": 800,
+      "width": 420,
+      "height": 330,
+      "color": "2"
+    },
+    {
+      "id": "diff-moat",
+      "type": "text",
+      "text": "# Diff engine as infrastructure\n**Implemented foundation, not yet a scenario runner**\n\nThe existing tracker supplies local chronological evidence and distinguishes:\n- direct value changes;\n- formula-text changes;\n- calculated-result changes.\n\nThe scenario product can build on this evidence instead of treating each scenario as an unexplained workbook copy.",
+      "x": 800,
+      "y": 800,
+      "width": 420,
+      "height": 330,
+      "color": "6"
+    },
+    {
+      "id": "validation",
+      "type": "text",
+      "text": "# Market validation gate\n**Unproven**\n\nThe key question is not whether adjacent products exist. It is whether enough analysts repeatedly perform consequential, poorly recorded what-if work and will pay to make it reproducible.\n\nBest evidence: repeat use, payment, second-scenario configuration, and expansion to other analysts.",
+      "x": -800,
+      "y": 1290,
+      "width": 420,
+      "height": 310,
+      "color": "3"
+    },
+    {
+      "id": "scenario-package",
+      "type": "text",
+      "text": "# Deliberate scenario package\n**Product boundary**\n\nExcel remains the calculation engine. The scenario tool supplies controlled execution, comparison, evidence, and validation. GCBS or another presentation layer receives selected inputs, outputs, differences, status, and approved explanations—not the whole workbook.",
+      "x": 0,
+      "y": 1290,
+      "width": 420,
+      "height": 310,
+      "color": "5"
+    },
+    {
+      "id": "open-decisions",
+      "type": "text",
+      "text": "# Decisions still open\n- Recorder first, controlled runner first, or a staged combination?\n- Add-in versus desktop-host responsibilities?\n- How much setup remains customer-specific?\n- What contract survives sheet and range changes?\n- What packaging and price support the real maintenance burden?\n\nThese are hypotheses to test, not implementation claims.",
+      "x": 800,
+      "y": 1290,
+      "width": 420,
+      "height": 310,
+      "color": "1"
+    },
+    {
+      "id": "discovery-source",
+      "type": "file",
+      "file": "docs/product-strategy/sessions/2026-09-03-scenario-product-discovery.md",
+      "x": 0,
+      "y": 1770,
+      "width": 420,
+      "height": 240,
+      "color": "6"
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-title-thesis",
+      "fromNode": "strategy-title",
+      "fromSide": "bottom",
+      "toNode": "product-thesis",
+      "toSide": "top"
+    },
+    {
+      "id": "edge-thesis-layers",
+      "fromNode": "product-thesis",
+      "fromSide": "bottom",
+      "toNode": "product-layers",
+      "toSide": "top",
+      "label": "progressive value"
+    },
+    {
+      "id": "edge-thesis-market",
+      "fromNode": "product-thesis",
+      "fromSide": "bottom",
+      "toNode": "market-competition",
+      "toSide": "top",
+      "label": "customer and alternatives"
+    },
+    {
+      "id": "edge-thesis-trust",
+      "fromNode": "product-thesis",
+      "fromSide": "bottom",
+      "toNode": "trust-boundary",
+      "toSide": "top",
+      "label": "safe operating model"
+    },
+    {
+      "id": "edge-layers-utility",
+      "fromNode": "product-layers",
+      "fromSide": "bottom",
+      "toNode": "utility-wedge",
+      "toSide": "top"
+    },
+    {
+      "id": "edge-market-assurance",
+      "fromNode": "market-competition",
+      "fromSide": "bottom",
+      "toNode": "assurance-product",
+      "toSide": "top"
+    },
+    {
+      "id": "edge-trust-diff",
+      "fromNode": "trust-boundary",
+      "fromSide": "bottom",
+      "toNode": "diff-moat",
+      "toSide": "top"
+    },
+    {
+      "id": "edge-utility-validation",
+      "fromNode": "utility-wedge",
+      "fromSide": "bottom",
+      "toNode": "validation",
+      "toSide": "top",
+      "label": "test demand"
+    },
+    {
+      "id": "edge-utility-package",
+      "fromNode": "utility-wedge",
+      "fromSide": "right",
+      "toNode": "scenario-package",
+      "toSide": "left",
+      "label": "creates reusable record"
+    },
+    {
+      "id": "edge-assurance-package",
+      "fromNode": "assurance-product",
+      "fromSide": "bottom",
+      "toNode": "scenario-package",
+      "toSide": "top",
+      "label": "governs and certifies"
+    },
+    {
+      "id": "edge-diff-decisions",
+      "fromNode": "diff-moat",
+      "fromSide": "bottom",
+      "toNode": "open-decisions",
+      "toSide": "top"
+    },
+    {
+      "id": "edge-package-discovery",
+      "fromNode": "scenario-package",
+      "fromSide": "bottom",
+      "toNode": "discovery-source",
+      "toSide": "top",
+      "label": "reasoning source"
+    },
+    {
+      "id": "edge-validation-discovery",
+      "fromNode": "validation",
+      "fromSide": "bottom",
+      "toNode": "discovery-source",
+      "toSide": "left"
+    },
+    {
+      "id": "edge-decisions-discovery",
+      "fromNode": "open-decisions",
+      "fromSide": "bottom",
+      "toNode": "discovery-source",
+      "toSide": "right"
+    }
+  ]
+}

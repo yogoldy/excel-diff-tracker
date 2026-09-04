@@ -16,6 +16,16 @@ documentation: [Project status](../PROJECT_STATUS.md) records current maturity,
   [2026-09-03 discovery synthesis](sessions/2026-09-03-scenario-product-discovery.md)
 - **Current delivery sequence:** [Product roadmap](../PRODUCT_ROADMAP.md)
 
+## Visual maps
+
+- **How the product pieces fit together:** [Product strategy map](canvases/PRODUCT_STRATEGY_MAP.canvas)
+- **How a trusted scenario run would work:**
+  [Controlled scenario workflow](canvases/CONTROLLED_SCENARIO_WORKFLOW.canvas)
+
+These native Obsidian canvases are visual navigation aids. The linked Markdown notes remain the
+authoritative text, and the workflow canvas describes planned behavior rather than current 0.2.0
+capability.
+
 ## Status vocabulary
 
 These notes deliberately distinguish:

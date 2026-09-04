@@ -30,8 +30,8 @@ should be repaired together in one stabilization pass. Product direction beyond 
 comparison engine is provisional and is maintained in `docs/PRODUCT_ROADMAP.md`. The supporting
 [product strategy corpus](docs/product-strategy/README.md) preserves the product thesis, tiered
 scenario possibilities, read/operate/build trust boundary, market and competitor framing, GCBS
-relationship, and the 2026-09-03 discovery synthesis without representing those ideas as
-implemented.
+relationship, two native Obsidian navigation canvases, and the 2026-09-03 discovery synthesis
+without representing those ideas as implemented.
 
 ## Evidence boundary
 
