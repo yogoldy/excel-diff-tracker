@@ -71,6 +71,10 @@ A low one-time price could test demand, but durable support, code signing, Excel
 edge-case handling may require a higher paid tier or continuing revenue. Pricing is an experiment,
 not a settled decision.
 
+If configuration remains customer-specific, early adoption may require service-assisted onboarding,
+which could weaken the economics of a low-cost self-serve utility. A service-assisted entry may still
+be strategically useful if it reveals which setup steps can later become repeatable product behavior.
+
 ## Market validation questions
 
 Before treating this as a software market, validate:
